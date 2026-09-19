@@ -328,7 +328,12 @@ function renderProfileStats(){
   function val(v){return v==null||v===''?'—':(typeof v==='number'?v.toLocaleString('fr-FR'):esc(v))}
   var missing=(wins==null&&kills==null&&matches==null);
   if(missing){
-    box.innerHTML='<div class="notice">Le serveur a bien répondu, mais aucune statistique exploitable n’a été trouvée pour ce compte.<br><span class="sub">Vérifie le pseudo Epic et que le compte possède des statistiques publiques Fortnite.</span></div>';
+    var accountLabel=s.account&&s.account.displayName?s.account.displayName:(FN.player||"ce compte");
+    var rawKeys=[];
+    try{
+      Object.keys(rawStats||{}).forEach(function(k){rawKeys.push(k)});
+    }catch(_){}
+    box.innerHTML='<div class="notice"><strong>Compte trouvé : '+esc(accountLabel)+'</strong><br>La réponse Fortnite ne contient pas les statistiques publiques demandées.<br><span class="sub">ID Epic : '+esc(s.accountId||"—")+' · Champs reçus : '+esc(rawKeys.slice(0,18).join(", ")||"aucun")+'</span></div>';
     return;
   }
   box.innerHTML='<section class="grid g4"><div class="card metric"><div class="label">Victoires</div><div class="value">'+val(wins)+'</div><div class="sub">Lifetime</div></div><div class="card metric"><div class="label">K/D</div><div class="value">'+val(kd)+'</div><div class="sub">Éliminations / morts</div></div><div class="card metric"><div class="label">Niveau</div><div class="value">'+val(level)+'</div><div class="sub">'+(xp!=null?'XP : '+val(xp):'Profil')+'</div></div><div class="card metric"><div class="label">Parties</div><div class="value">'+val(matches)+'</div><div class="sub">Lifetime</div></div></section><div style="height:16px"></div><section class="card"><div class="section-title">Classement</div><div class="list"><div class="row"><span>Rang</span><strong>'+val(rank)+'</strong></div><div class="row"><span>Points</span><strong>'+val(rankPoints)+'</strong></div></div></section><div style="height:16px"></div><section class="card"><div class="section-title">Détails Battle Royale</div><div class="list"><div class="row"><span>Éliminations</span><strong>'+val(kills)+'</strong></div><div class="row"><span>Morts</span><strong>'+val(deaths)+'</strong></div><div class="row"><span>Taux de victoire</span><strong>'+(winRate!=null?val(winRate)+' %':'—')+'</strong></div><div class="row"><span>Top 3</span><strong>'+val(top3)+'</strong></div><div class="row"><span>Top 5</span><strong>'+val(top5)+'</strong></div><div class="row"><span>Top 10</span><strong>'+val(top10)+'</strong></div></div></section>';
