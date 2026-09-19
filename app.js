@@ -180,6 +180,7 @@ async function shop(){
     entries.sort(function(a,b){
       return String(a.section).localeCompare(String(b.section))||String(a.name).localeCompare(String(b.name));
     });
+    var box=document.getElementById("fn-shop");
     box.innerHTML=entries.slice(0,60).map(function(x){
       return '<article class="card item-card"><div class="cosmetic-img">'+(x.image?'<img src="'+esc(x.image)+'" alt="'+esc(x.name)+'" loading="lazy">':'🛒')+'</div><div class="item-body"><div class="eyebrow" style="font-size:9px">'+esc(x.section||"Boutique")+'</div><strong>'+esc(x.name)+'</strong><div class="sub">'+(x.price!=null?esc(x.price)+" V-Bucks":"Prix non indiqué")+' · '+esc(x.itemCount||1)+" objet"+((x.itemCount||1)>1?"s":"")+'</div></div></article>';
     }).join("")||'<div class="card"><div class="sub">Aucune offre retournée.</div></div>';
