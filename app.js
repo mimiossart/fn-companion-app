@@ -149,11 +149,38 @@ async function shop(){
     var r=await fetch("/api/fortnite?type=shop");
     var d=await r.json();
     if(!r.ok)throw new Error(d.error||"Boutique indisponible");
-    var raw=Array.isArray(d.entries)?d.entries:[];
+    var payload=d&&d.data?d.data:d;
+    var sections=[];
+    if(payload&&Array.isArray(payload)) sections.push({name:"Boutique",entries:payload});
+    else if(payload&&typeof payload==="object"){
+      ["featured","daily","specialFeatured","specialDaily","votes","voteWinners"].forEach(function(key){
+        var section=payload[key];
+        if(section&&Array.isArray(section.entries))sections.push({name:section.name||key,entries:section.entries});
+      });
+      if(Array.isArray(payload.entries))sections.push({name:"Boutique",entries:payload.entries});
+    }
     var entries=[];
-    raw.forEach(function(e){
-      var it=(e.items&&e.items[0])||e.item||e;
-      entries.push({name:it.name||e.name||"Objet",image:(it.images&&(it.images.featured||it.images.icon||it.images.smallIcon))||"",rarity:(it.rarity&&(it.rarity.displayValue||it.rarity.value))||"",price:e.finalPrice!=null?e.finalPrice:(e.price!=null?e.price:null)});
+    sections.forEach(function(section){
+      section.entries.forEach(function(e){
+        var items=Array.isArray(e.items)&&e.items.length?e.items:[e.item||e];
+        items.forEach(function(it){
+          if(!it||typeof it!=="object")return;
+          entries.push({
+            name:it.name||e.name||e.offerName||"Objet",
+            image:(it.images&&(it.images.featured||it.images.icon||it.images.smallIcon))||e.image||"",
+            rarity:(it.rarity&&(it.rarity.displayValue||it.rarity.value))||e.rarity||section.name||"",
+            price:e.finalPrice!=null?e.finalPrice:(e.regularPrice!=null?e.regularPrice:(e.price!=null?e.price:null)),
+            section:section.name
+          });
+        });
+      });
+    });
+    var seen={};
+    entries=entries.filter(function(x){
+      var k=(x.name||"")+"|"+(x.image||"");
+      if(seen[k])return false;
+      seen[k]=true;
+      return true;
     });
     var box=document.getElementById("fn-shop");
     box.innerHTML=entries.slice(0,40).map(function(x){
