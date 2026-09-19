@@ -229,44 +229,43 @@ export default async function handler(req,res){
   }
 
   if(type==="map"){
-    if(!key)return res.status(503).json({error:"FORTNITE_API_KEY n'est pas configurée dans Vercel."});
     try{
-      const headers={"x-api-key":key};
-      // Les deux ressources sont demandées en parallèle pour éviter de dépasser
-      // la durée maximale d'une Serverless Function Vercel.
-      const results=await Promise.all([
-        fetchWithTimeout(DATA_API+"/api/v1/map",{headers},4500),
-        fetchWithTimeout(DATA_API+"/api/v1/map/image",{headers,redirect:"follow"},4500)
-      ]);
-      const mapRes=results[0],imageRes=results[1];
-      const mapText=await mapRes.text();
+      let mapJson=null;
+      let imageUrl=null;
 
-      if(!mapRes.ok){
-        let msg=mapText;
-        try{const j=JSON.parse(mapText);msg=j.error||j.message||mapText}catch(_){}
-        return res.status(mapRes.status).json({error:String(msg).slice(0,500)});
+      if(key){
+        try{
+          const r=await fetchWithTimeout(DATA_API+"/api/v1/map",{headers:{"x-api-key":key,"accept":"application/json"}},5000);
+          const text=await r.text();
+          if(r.ok)try{mapJson=JSON.parse(text)}catch(_){}
+        }catch(_){}
       }
 
-      let mapData=null;
-      try{mapData=JSON.parse(mapText)}catch(_){
-        return res.status(502).json({error:"Réponse carte invalide."});
+      if(!mapJson){
+        try{
+          const r=await fetchWithTimeout("https://fortnite-api.com/v1/map",{headers:{"accept":"application/json"}},6000);
+          const text=await r.text();
+          if(r.ok)try{mapJson=JSON.parse(text)}catch(_){}
+        }catch(_){}
       }
 
-      const payload=mapData&&mapData.data!==undefined?mapData.data:mapData;
-      const imageUrl=imageRes&&imageRes.ok?imageRes.url:null;
+      if(!mapJson)return res.status(502).json({error:"La carte Fortnite est temporairement indisponible."});
+
+      const payload=mapJson&&mapJson.data!==undefined?mapJson.data:mapJson;
+      if(key){
+        try{
+          const r=await fetchWithTimeout(DATA_API+"/api/v1/map/image",{headers:{"x-api-key":key},redirect:"follow"},3500);
+          if(r.ok)imageUrl=r.url;
+        }catch(_){}
+      }
+      if(!imageUrl&&payload&&payload.images){
+        imageUrl=payload.images.blank||payload.images.zoomed||payload.images.pois||payload.images.all||null;
+      }
+
       res.setHeader("Cache-Control","public, s-maxage=1800, stale-while-revalidate=21600, stale-if-error=21600");
-      return res.status(200).json({
-        data:payload,
-        image:imageUrl,
-        source:"api-fortnite.com",
-        fetchedAt:new Date().toISOString()
-      });
+      return res.status(200).json({data:payload,image:imageUrl,source:key?"api-fortnite":"fortnite-api.com",fetchedAt:new Date().toISOString()});
     }catch(e){
-      return res.status(502).json({
-        error:e.name==="AbortError"
-          ?"Fortnite API Carte : délai dépassé."
-          :(e.message||"Carte indisponible.")
-      });
+      return res.status(502).json({error:e.name==="AbortError"?"Délai dépassé pour la carte.":(e.message||"Carte indisponible.")});
     }
   }
   if(type==="shop"){
