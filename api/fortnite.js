@@ -44,7 +44,7 @@ export default async function handler(req,res){
   const paths={
     cosmetics:"/v2/cosmetics/br?language=fr",
     map:"/v1/map",
-    shop:"/v2/shop/br?language=fr",
+    shop:"/v2/shop?language=fr",
     news:"/v2/news"
   };
   if(!paths[type])return res.status(400).json({error:"Type inconnu."});
