@@ -69,7 +69,7 @@ function nav(){
 
 function mobileNav(){
   var html='<div class="mobile-nav">';
-  Object.keys(ROUTES).slice(0,6).forEach(function(key){
+  Object.keys(ROUTES).slice(0,7).forEach(function(key){
     html+='<button class="'+(FN.page===key?"active":"")+'" onclick="go(\''+key+'\')">'+ROUTES[key][1]+'<br>'+ROUTES[key][0]+'</button>';
   });
   return html+'</div>';
