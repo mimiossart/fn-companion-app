@@ -56,6 +56,7 @@ export default async function handler(req,res){
   const type=(req.query&&req.query.type)||"cosmetics";
   const name=((req.query&&req.query.name)||"").trim();
   const key=process.env.FORTNITE_API_KEY||"";
+  const fortniteToken=process.env.FORTNITE_TOKEN||"";
 
   if(type==="stats"){
     if(!name)return res.status(400).json({error:"Nom de joueur manquant."});
@@ -234,8 +235,13 @@ export default async function handler(req,res){
 
       // The current API is documented as using one x-api-key for all endpoints,
       // including Pro Quests. Try the quests endpoint directly first.
+      if(!fortniteToken){
+        return res.status(401).json({
+          error:"Les quêtes personnelles nécessitent un x-fortnite-token. Le plan Pro seul ne suffit pas."
+        });
+      }
       const questRes=await fetchWithTimeout(DATA_API+"/api/v2/quests/"+encodeURIComponent(accountId),{
-        headers:{"x-api-key":key}
+        headers:{"x-api-key":key,"x-fortnite-token":fortniteToken,"accept":"application/json"}
       });
       const body=await questRes.text();
 
