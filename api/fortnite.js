@@ -60,7 +60,7 @@ export default async function handler(req,res){
   const fortniteToken=process.env.FORTNITE_TOKEN||"";
 
   if(type==="stats"){
-    if(!name)return res.status(400).json({error:"Nom de joueur manquant."});
+    if(!name&&!requestedAccountId)return res.status(400).json({error:"Nom de joueur ou ID Epic manquant."});
     if(!key)return res.status(503).json({error:"FORTNITE_API_KEY n'est pas configurée dans Vercel."});
 
     const headers={"x-api-key":key};
