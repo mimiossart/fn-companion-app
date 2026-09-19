@@ -294,8 +294,10 @@ function readStatsStore(){
 }
 function renderProfileStats(){
   var box=document.getElementById('profile-stats');if(!box)return;
-  var s=FN.stats;if(!s){box.innerHTML='<div class="sub">Aucune statistique chargée.</div>';return}
+  var s=FN.stats;
+  if(!s){box.innerHTML='<div class="sub">Aucune statistique chargée.</div>';return}
   var st=s.stats||s;
+  var progress=s.progress||null;
   var wins=deepFind(st,['wins','br_wins','brWins','br_wins_total','wins_total','victories']);
   var kills=deepFind(st,['kills','br_kills','brKills','br_kills_total','kills_total','eliminations']);
   var deaths=deepFind(st,['deaths','br_deaths','brDeaths']);
@@ -304,9 +306,13 @@ function renderProfileStats(){
   var winRate=deepFind(st,['winRate','winrate','br_winrate','br_winrate_total','win_rate']);
   var rank=deepFind(s,['rank','displayRank','currentRank','division','tier']);
   var rankPoints=deepFind(s,['rankPoints','points','rating','rp']);
+  var level=deepFind(progress,['level','currentLevel','accountLevel','seasonLevel','battlePassLevel']);
+  if(level==null)level=deepFind(s,['level','currentLevel','accountLevel','seasonLevel','battlePassLevel']);
+  var xp=deepFind(progress,['xp','experience','currentXp','seasonXp']);
+  if(xp==null)xp=deepFind(s,['xp','experience','currentXp','seasonXp']);
   var minutes=deepFind(st,['minutesPlayed','minutes_played']);
   function val(v){return v==null||v===''?'—':(typeof v==='number'?v.toLocaleString('fr-FR'):esc(v))}
-  box.innerHTML='<section class="grid g4"><div class="card metric"><div class="label">Victoires</div><div class="value">'+val(wins)+'</div><div class="sub">Lifetime</div></div><div class="card metric"><div class="label">K/D</div><div class="value">'+val(kd)+'</div><div class="sub">Rapport éliminations / morts</div></div><div class="card metric"><div class="label">Parties</div><div class="value">'+val(matches)+'</div><div class="sub">Lifetime</div></div><div class="card metric"><div class="label">Rang</div><div class="value" style="font-size:20px">'+val(rank)+'</div><div class="sub">'+(rankPoints!=null?'Points : '+val(rankPoints):'Selon les données disponibles')+'</div></div></section><div style="height:16px"></div><section class="card"><div class="section-title">Détails Battle Royale</div><div class="list"><div class="row"><span>Éliminations</span><strong>'+val(kills)+'</strong></div><div class="row"><span>Morts</span><strong>'+val(deaths)+'</strong></div><div class="row"><span>Taux de victoire</span><strong>'+(winRate!=null?val(winRate)+' %':'—')+'</strong></div><div class="row"><span>Minutes jouées</span><strong>'+val(minutes)+'</strong></div></div></section>';
+  box.innerHTML='<section class="grid g4"><div class="card metric"><div class="label">Victoires</div><div class="value">'+val(wins)+'</div><div class="sub">Lifetime</div></div><div class="card metric"><div class="label">K/D</div><div class="value">'+val(kd)+'</div><div class="sub">Rapport éliminations / morts</div></div><div class="card metric"><div class="label">Niveau</div><div class="value">'+val(level)+'</div><div class="sub">'+(xp!=null?'XP : '+val(xp):'Profil')+'</div></div><div class="card metric"><div class="label">Parties</div><div class="value">'+val(matches)+'</div><div class="sub">Lifetime</div></div></section><div style="height:16px"></div><section class="card"><div class="section-title">Classement</div><div class="list"><div class="row"><span>Rang</span><strong>'+val(rank)+'</strong></div><div class="row"><span>Points</span><strong>'+val(rankPoints)+'</strong></div></div></section><div style="height:16px"></div><section class="card"><div class="section-title">Détails Battle Royale</div><div class="list"><div class="row"><span>Éliminations</span><strong>'+val(kills)+'</strong></div><div class="row"><span>Morts</span><strong>'+val(deaths)+'</strong></div><div class="row"><span>Taux de victoire</span><strong>'+(winRate!=null?val(winRate)+' %':'—')+'</strong></div><div class="row"><span>Minutes jouées</span><strong>'+val(minutes)+'</strong></div></div></section>';
 }
 function profile(){
   if(!FN.stats)FN.stats=readStatsStore();
