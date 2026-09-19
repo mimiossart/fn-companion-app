@@ -100,26 +100,25 @@ export default async function handler(req,res){
         return values.reduce(function(total,v){return total+v},0);
       }
 
+      function statTotal(totalPatterns, detailPatterns){
+        const total=firstStat(totalPatterns);
+        return total!=null?total:sumStats(detailPatterns);
+      }
+
       const normalized={
-        wins:firstStat(['br_wins_total','br_placetop1']),
-        kills:firstStat(['br_kills_total']),
-        deaths:firstStat(['br_deaths_total']),
-        matches:firstStat(['br_matches_total']),
-        minutes:firstStat(['br_minutes_total','br_minutesplayed']),
-        top3:firstStat(['br_top3','br_placetop3']),
-        top5:firstStat(['br_top5','br_placetop5']),
-        top10:firstStat(['br_top10','br_placetop10']),
+        // Prefer the API lifetime totals. Only sum playlist/detail fields when
+        // the lifetime total is absent, preventing the same value being counted twice.
+        wins:statTotal(['br_wins_total'],['br_placetop1']),
+        kills:statTotal(['br_kills_total'],['br_kills']),
+        deaths:statTotal(['br_deaths_total'],['br_deaths']),
+        matches:statTotal(['br_matches_total'],['br_matches','br_matchesplayed']),
+        minutes:statTotal(['br_minutes_total'],['br_minutesplayed']),
+        top3:statTotal(['br_top3'],['br_placetop3']),
+        top5:statTotal(['br_top5'],['br_placetop5']),
+        top10:statTotal(['br_top10'],['br_placetop10']),
         kd:firstStat(['br_kd','killdeathratio','kdratio']),
         winRate:firstStat(['br_winrate','winrate'])
       };
-
-      if(normalized.wins==null)normalized.wins=sumStats(['br_placetop1']);
-      if(normalized.kills==null)normalized.kills=sumStats(['br_kills']);
-      if(normalized.deaths==null)normalized.deaths=sumStats(['br_deaths']);
-      if(normalized.matches==null)normalized.matches=sumStats(['br_matches','br_matchesplayed']);
-      if(normalized.top3==null)normalized.top3=sumStats(['br_placetop3']);
-      if(normalized.top5==null)normalized.top5=sumStats(['br_placetop5']);
-      if(normalized.top10==null)normalized.top10=sumStats(['br_placetop10']);
 
       if(normalized.kd==null && normalized.kills!=null && normalized.deaths!=null && Number(normalized.deaths)>0){
         normalized.kd=Number(normalized.kills)/Number(normalized.deaths);
