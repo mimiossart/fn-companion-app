@@ -1,4 +1,15 @@
 const UPSTREAM = "https://fortnite-api.com";
+async function fetchWithTimeout(url,options,timeoutMs){
+  const controller=new AbortController();
+  const timer=setTimeout(()=>controller.abort(),timeoutMs||8000);
+  try{
+    const opts=Object.assign({},options||{},{signal:controller.signal});
+    return await fetch(url,opts);
+  }finally{
+    clearTimeout(timer);
+  }
+}
+
 const DATA_API = "https://prod.api-fortnite.com";
 
 async function readJson(r){
@@ -19,11 +30,15 @@ export default async function handler(req,res){
 
     const headers={"x-api-key":key};
     try{
-      const accountRes=await fetch(DATA_API+"/api/v1/account/displayName/"+encodeURIComponent(name),{headers});
+      const accountRes=await fetchWithTimeout(DATA_API+"/api/v1/account/displayName/"+encodeURIComponent(name),{headers});
       const account=await readJson(accountRes);
       if(!account.ok){
-        const apiMsg=account.data&&(account.data.error||account.data.message);
-        return res.status(account.status).json({error:apiMsg||("Impossible de trouver le joueur \""+name+"\".")});
+        const apiMsg=account.data&&(account.data.error||account.data.message||account.data.detail);
+        return res.status(account.status).json({
+          error:apiMsg||("Impossible de trouver le joueur \""+name+"\"."),
+          upstreamStatus:account.status,
+          upstreamResponse:account.raw?account.raw.slice(0,500):""
+        });
       }
 
       const accountRoot=account.data&&account.data.data!==undefined?account.data.data:account.data;
@@ -33,7 +48,7 @@ export default async function handler(req,res){
       if(!accountId)return res.status(502).json({error:"Le service a trouvé le compte mais n'a pas renvoyé son ID Epic."});
 
       // Endpoint documenté : récupération complète des statistiques par account ID.
-      const statsRes=await fetch(DATA_API+"/api/v2/stats/"+encodeURIComponent(accountId),{headers});
+      const statsRes=await fetchWithTimeout(DATA_API+"/api/v2/stats/"+encodeURIComponent(accountId),{headers});
       const stats=await readJson(statsRes);
       if(!stats.ok){
         const apiMsg=stats.data&&(stats.data.error||stats.data.message);
@@ -110,7 +125,7 @@ export default async function handler(req,res){
         // the lifetime total is absent, preventing the same value being counted twice.
         wins:statTotal(['br_wins_total'],['br_placetop1']),
         kills:statTotal(['br_kills_total'],['br_kills','kills','eliminations']),
-        deaths:statTotal(['br_deaths_total','deaths_total','deathstotal'],['br_deaths','deaths','eliminated']),
+        deaths:statTotal(['br_deaths_total'],['br_deaths','deaths']),
         matches:statTotal(['br_matches_total'],['br_matches','br_matchesplayed']),
         minutes:statTotal(['br_minutes_total'],['br_minutesplayed']),
         top3:statTotal(['br_top3'],['br_placetop3']),
@@ -123,9 +138,6 @@ export default async function handler(req,res){
       if(normalized.kd==null && normalized.kills!=null && normalized.deaths!=null && Number(normalized.deaths)>0){
         normalized.kd=Number(normalized.kills)/Number(normalized.deaths);
       }
-      if(normalized.deaths==null && normalized.kills!=null && normalized.kd!=null && Number(normalized.kd)>0){
-        normalized.deaths=Math.max(0,Math.round(Number(normalized.kills)/Number(normalized.kd)));
-      }
       if(normalized.kd==null && normalized.kills!=null && normalized.matches!=null && Number(normalized.matches)>Number(normalized.wins||0)){
         const estimatedDeaths=Number(normalized.matches)-Number(normalized.wins||0);
         if(estimatedDeaths>0)normalized.kd=Number(normalized.kills)/estimatedDeaths;
@@ -133,67 +145,23 @@ export default async function handler(req,res){
       if(normalized.winRate==null && normalized.wins!=null && normalized.matches!=null && Number(normalized.matches)>0){
         normalized.winRate=(Number(normalized.wins)/Number(normalized.matches))*100;
       }
-      let seasonStats=null,progress=null,ranked=null;
-      let progressNormalized={level:null,xp:null};
-      let progressError=null,rankedError=null;
-
-      function findNumericByPattern(obj,patterns){
-        let found=null;
-        const wanted=patterns.map(function(p){return String(p||"").toLowerCase().replace(/[^a-z0-9]/g,"")});
-        function walk(node){
-          if(found!=null||node==null||typeof node!=="object")return;
-          if(Array.isArray(node)){node.forEach(walk);return}
-          Object.keys(node).forEach(function(key){
-            if(found!=null)return;
-            const nk=String(key||"").toLowerCase().replace(/[^a-z0-9]/g,"");
-            if(wanted.some(function(p){return nk===p||nk.indexOf(p)>=0})){
-              let v=node[key];
-              if(v&&typeof v==="object"){
-                v=v.value!=null?v.value:(v.current!=null?v.current:(v.total!=null?v.total:null));
-              }
-              if(v!=null&&v!==""&&!isNaN(Number(v)))found=Number(v);
-            }
-          });
-          if(found==null)Object.keys(node).forEach(function(key){walk(node[key])});
-        }
-        walk(obj);
-        return found;
-      }
-
-      try{
-        const seasonRes=await fetch(DATA_API+"/api/v1/profile/stats?displayName="+encodeURIComponent(name)+"&timeWindow=season",{headers});
-        const seasonText=await seasonRes.text();
-        if(seasonRes.ok){
-          let seasonJson=null;try{seasonJson=JSON.parse(seasonText)}catch(_){}
-          seasonStats=seasonJson&&seasonJson.data!==undefined?seasonJson.data:seasonJson;
-        }
-      }catch(_){}
-
-      // Endpoint Pro documenté pour le niveau/XP du profil.
-      try{
-        const progressRes=await fetch(DATA_API+"/api/v1/profile/progress?displayName="+encodeURIComponent(name),{headers});
-        const progressText=await progressRes.text();
-        let progressJson=null;try{progressJson=JSON.parse(progressText)}catch(_){}
-        if(progressRes.ok){
-          progress=progressJson&&progressJson.data!==undefined?progressJson.data:progressJson;
-          progressNormalized.level=findNumericByPattern(progress,["level","currentLevel","accountLevel","seasonLevel","profileLevel","battlePassLevel"]);
-          progressNormalized.xp=findNumericByPattern(progress,["xp","experience","currentXp","seasonXp","experiencePoints","totalXp"]);
-        }else{
-          progressError={status:progressRes.status,message:(progressJson&&(progressJson.error||progressJson.message))||progressText.slice(0,500)};
-        }
-      }catch(e){progressError={status:0,message:e.message||"Erreur réseau"}}
-
-      try{
-        const rankedRes=await fetch(DATA_API+"/api/v1/profile/ranked?displayName="+encodeURIComponent(name),{headers});
-        const rankedText=await rankedRes.text();
-        let rankedJson=null;try{rankedJson=JSON.parse(rankedText)}catch(_){}
-        if(rankedRes.ok){
-          ranked=rankedJson&&rankedJson.data!==undefined?rankedJson.data:rankedJson;
-        }else{
-          rankedError={status:rankedRes.status,message:(rankedJson&&(rankedJson.error||rankedJson.message))||rankedText.slice(0,500)};
-        }
-      }catch(e){rankedError={status:0,message:e.message||'Erreur réseau'}}
-
+      // Les statistiques principales sont retournées immédiatement.
+      // Les données de profil (niveau/XP/ranked) restent optionnelles pour ne
+      // jamais empêcher le chargement des victoires, K/D et parties.
+      return res.status(200).json({
+        ok:true,
+        account:accountData,
+        accountId:accountId,
+        stats:raw,
+        rawStatsEnvelope:rawEnvelope,
+        normalized:normalized,
+        seasonStats:null,
+        progress:null,
+        progressNormalized:{level:null,xp:null},
+        progressError:{status:0,message:"Profil optionnel non chargé"},
+        ranked:null,
+        rankedError:null
+      });
       return res.status(200).json({
         ok:true,
         account:accountData,
@@ -217,7 +185,7 @@ export default async function handler(req,res){
     if(!name)return res.status(400).json({error:"Nom de joueur manquant."});
     if(!key)return res.status(503).json({error:"FORTNITE_API_KEY n'est pas configurée dans Vercel."});
     try{
-      const accountRes=await fetch(DATA_API+"/api/v1/account/displayName/"+encodeURIComponent(name),{
+      const accountRes=await fetchWithTimeout(DATA_API+"/api/v1/account/displayName/"+encodeURIComponent(name),{
         headers:{"x-api-key":key}
       });
       const account=await readJson(accountRes);
@@ -233,7 +201,7 @@ export default async function handler(req,res){
 
       // The current API is documented as using one x-api-key for all endpoints,
       // including Pro Quests. Try the quests endpoint directly first.
-      const questRes=await fetch(DATA_API+"/api/v2/quests/"+encodeURIComponent(accountId),{
+      const questRes=await fetchWithTimeout(DATA_API+"/api/v2/quests/"+encodeURIComponent(accountId),{
         headers:{"x-api-key":key}
       });
       const body=await questRes.text();
@@ -262,48 +230,82 @@ export default async function handler(req,res){
 
   if(type==="map"){
     if(!key)return res.status(503).json({error:"FORTNITE_API_KEY n'est pas configurée dans Vercel."});
+    const cacheKey="map";
+    const cacheHeader=cacheControl(1800,21600);
+    const fresh=cached(cacheKey,false);
+    if(sendCached(res,fresh,cacheHeader))return;
     try{
       const headers={"x-api-key":key};
-      const mapRes=await fetch(DATA_API+"/api/v1/map",{headers});
+      const mapRes=await fetchWithTimeout(DATA_API+"/api/v1/map",{headers});
       const mapText=await mapRes.text();
       if(!mapRes.ok){
-        let msg=mapText;
-        try{const j=JSON.parse(mapText);msg=j.error||j.message||mapText}catch(_){}
-        return res.status(mapRes.status).json({error:String(msg).slice(0,500)});
+        const stale=cached(cacheKey,true);
+        if(stale)sendCached(res,stale,cacheHeader);
+        else{
+          let msg=mapText;
+          try{const j=JSON.parse(mapText);msg=j.error||j.message||mapText}catch(_){}
+          return res.status(mapRes.status).json({error:String(msg).slice(0,500)});
+        }
+        return;
       }
 
       let mapData;
-      try{mapData=JSON.parse(mapText)}catch(e){return res.status(502).json({error:"Réponse carte invalide."})}
+      try{mapData=JSON.parse(mapText)}catch(e){
+        const stale=cached(cacheKey,true);
+        if(stale){sendCached(res,stale,cacheHeader);return}
+        return res.status(502).json({error:"Réponse carte invalide."});
+      }
 
       let imageUrl=null;
       try{
-        const imageRes=await fetch(DATA_API+"/api/v1/map/image",{headers,redirect:"follow"});
+        const imageRes=await fetchWithTimeout(DATA_API+"/api/v1/map/image",{headers,redirect:"follow"});
         if(imageRes.ok)imageUrl=imageRes.url;
       }catch(_){}
 
       const payload=mapData&&mapData.data!==undefined?mapData.data:mapData;
-      res.setHeader("Cache-Control","public, s-maxage=1800, stale-while-revalidate=21600, stale-if-error=21600");
-      return res.status(200).json({
+      const result={
         data:payload,
         image:imageUrl,
         source:"api-fortnite.com",
         fetchedAt:new Date().toISOString()
-      });
+      };
+      storeCache(cacheKey,result,1800000,21600000);
+      res.setHeader("Cache-Control",cacheHeader);
+      res.setHeader("X-FN-Cache","MISS");
+      return res.status(200).json(result);
     }catch(e){
-      return res.status(502).json({error:e.message||"Carte indisponible."});
+      const stale=cached(cacheKey,true);
+      if(stale)sendCached(res,stale,cacheHeader);
+      else return res.status(502).json({error:e.name==="AbortError"?"Fortnite API a dépassé le délai (timeout).":(e.message||"Carte indisponible.")});
+      return;
     }
   }
 
   if(type==="shop"){
     if(!key)return res.status(503).json({error:"FORTNITE_API_KEY n'est pas configurée dans Vercel."});
+    const cacheKey="shop-fr";
+    const cacheHeader=cacheControl(82800,86400);
+    const fresh=cached(cacheKey,false);
+    if(sendCached(res,fresh,cacheHeader))return;
     try{
-      const shopRes=await fetch(DATA_API+"/api/v1/shop?lang=fr",{headers:{"x-api-key":key}});
+      const shopRes=await fetchWithTimeout(DATA_API+"/api/v1/shop?lang=fr",{headers:{"x-api-key":key}});
       const body=await shopRes.text();
-      res.setHeader("Cache-Control","public, s-maxage=82800, stale-while-revalidate=86400, stale-if-error=86400");
-      res.status(shopRes.status).setHeader("Content-Type",shopRes.headers.get("content-type")||"application/json").send(body);
+      if(!shopRes.ok){
+        const stale=cached(cacheKey,true);
+        if(stale){sendCached(res,stale,cacheHeader);return}
+        res.status(shopRes.status).setHeader("Content-Type",shopRes.headers.get("content-type")||"application/json").send(body);
+        return;
+      }
+      storeCache(cacheKey,body,82800000,172800000);
+      res.setHeader("Cache-Control",cacheHeader);
+      res.setHeader("X-FN-Cache","MISS");
+      res.status(200).setHeader("Content-Type",shopRes.headers.get("content-type")||"application/json").send(body);
       return;
     }catch(e){
-      return res.status(502).json({error:e.message||"Boutique indisponible."});
+      const stale=cached(cacheKey,true);
+      if(stale)sendCached(res,stale,cacheHeader);
+      else return res.status(502).json({error:e.name==="AbortError"?"Fortnite API a dépassé le délai (timeout).":(e.message||"Boutique indisponible.")});
+      return;
     }
   }
 
@@ -313,19 +315,30 @@ export default async function handler(req,res){
   if(!paths[type])return res.status(400).json({error:"Type inconnu."});
 
   try{
-    const r=await fetch(DATA_API+paths[type],{headers:{"x-api-key":key}});
+    if(!key)return res.status(503).json({error:"FORTNITE_API_KEY n'est pas configurée dans Vercel."});
+    const cacheKey="cosmetics-fr";
+    const cacheHeader=cacheControl(21600,86400);
+    const fresh=cached(cacheKey,false);
+    if(sendCached(res,fresh,cacheHeader))return;
+    const r=await fetchWithTimeout(DATA_API+paths[type],{headers:{"x-api-key":key}});
     const text=await r.text();
     let payload=null;
     try{payload=JSON.parse(text)}catch(_){ }
     if(!r.ok){
+      const stale=cached(cacheKey,true);
+      if(stale){sendCached(res,stale,cacheHeader);return}
       const msg=payload&&(payload.error||payload.message);
       return res.status(r.status).json({error:msg||("Erreur API cosmetics : "+r.status)});
     }
     const data=payload&&payload.data!==undefined?payload.data:payload;
     const items=Array.isArray(data)?data:(data&&Array.isArray(data.items)?data.items:[]);
-    res.setHeader("Cache-Control","public, s-maxage=21600, stale-while-revalidate=86400, stale-if-error=86400");
+    storeCache(cacheKey,items,21600000,86400000);
+    res.setHeader("Cache-Control",cacheHeader);
+    res.setHeader("X-FN-Cache","MISS");
     return res.status(200).json(items);
   }catch(e){
-    return res.status(502).json({error:e.message||"API cosmetics indisponible"});
+    const stale=cached("cosmetics-fr",true);
+    if(stale){sendCached(res,stale,cacheControl(21600,86400));return}
+    return res.status(502).json({error:e.name==="AbortError"?"Fortnite API a dépassé le délai (timeout).":(e.message||"API cosmetics indisponible")});
   }
 }
