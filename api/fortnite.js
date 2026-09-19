@@ -131,27 +131,35 @@ export default async function handler(req,res){
         normalized.winRate=(Number(normalized.wins)/Number(normalized.matches))*100;
       }
       let seasonStats=null,progress=null,ranked=null;
+      let progressError=null,rankedError=null;
       try{
         const seasonRes=await fetch(DATA_API+"/api/v1/profile/stats?displayName="+encodeURIComponent(name)+"&timeWindow=season",{headers});
+        const seasonText=await seasonRes.text();
         if(seasonRes.ok){
-          const seasonJson=await seasonRes.json();
-          seasonStats=seasonJson.data!==undefined?seasonJson.data:seasonJson;
+          let seasonJson=null;try{seasonJson=JSON.parse(seasonText)}catch(_){}
+          seasonStats=seasonJson&&seasonJson.data!==undefined?seasonJson.data:seasonJson;
         }
       }catch(_){}
       try{
         const progressRes=await fetch(DATA_API+"/api/v1/profile/progress?displayName="+encodeURIComponent(name),{headers});
+        const progressText=await progressRes.text();
+        let progressJson=null;try{progressJson=JSON.parse(progressText)}catch(_){}
         if(progressRes.ok){
-          const progressJson=await progressRes.json();
-          progress=progressJson.data!==undefined?progressJson.data:progressJson;
+          progress=progressJson&&progressJson.data!==undefined?progressJson.data:progressJson;
+        }else{
+          progressError={status:progressRes.status,message:(progressJson&&(progressJson.error||progressJson.message))||progressText.slice(0,500)};
         }
-      }catch(_){}
+      }catch(e){progressError={status:0,message:e.message||'Erreur réseau'}}
       try{
         const rankedRes=await fetch(DATA_API+"/api/v1/profile/ranked?displayName="+encodeURIComponent(name),{headers});
+        const rankedText=await rankedRes.text();
+        let rankedJson=null;try{rankedJson=JSON.parse(rankedText)}catch(_){}
         if(rankedRes.ok){
-          const rankedJson=await rankedRes.json();
-          ranked=rankedJson.data!==undefined?rankedJson.data:rankedJson;
+          ranked=rankedJson&&rankedJson.data!==undefined?rankedJson.data:rankedJson;
+        }else{
+          rankedError={status:rankedRes.status,message:(rankedJson&&(rankedJson.error||rankedJson.message))||rankedText.slice(0,500)};
         }
-      }catch(_){}
+      }catch(e){rankedError={status:0,message:e.message||'Erreur réseau'}}
 
       return res.status(200).json({
         ok:true,
@@ -162,7 +170,9 @@ export default async function handler(req,res){
         normalized:normalized,
         seasonStats:seasonStats,
         progress:progress,
-        ranked:ranked
+        progressError:progressError,
+        ranked:ranked,
+        rankedError:rankedError
       });
     }catch(e){
       return res.status(502).json({error:e.message||"API stats indisponible."});
