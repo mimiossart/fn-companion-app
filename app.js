@@ -4,7 +4,11 @@ var FN={
   favorites:[],
   cosmetics:[],
   shop:[],
-  map:null
+  map:null,
+  stats:null,
+  supabase:null,
+  user:null,
+  selectedTournament:null
 };
 
 var ROUTES={
@@ -14,6 +18,7 @@ var ROUTES={
   items:["Skins & objets","◈"],
   shop:["Boutique","🛒"],
   profile:["Profil","◉"],
+  tournaments:["Tournois","🏆"],
   live:["Live","↗"]
 };
 
@@ -64,7 +69,7 @@ function nav(){
 
 function mobileNav(){
   var html='<div class="mobile-nav">';
-  Object.keys(ROUTES).slice(0,5).forEach(function(key){
+  Object.keys(ROUTES).slice(0,6).forEach(function(key){
     html+='<button class="'+(FN.page===key?"active":"")+'" onclick="go(\''+key+'\')">'+ROUTES[key][1]+'<br>'+ROUTES[key][0]+'</button>';
   });
   return html+'</div>';
@@ -154,6 +159,163 @@ async function quests(){
   }catch(e){
     box.innerHTML='<div class="notice">Impossible de charger les vrais défis : '+esc(e.message||'Erreur inconnue')+'</div>';
   }
+}
+
+function initSupabase(){
+  try{
+    if(window.supabase&&window.FN_SUPABASE_URL&&window.FN_SUPABASE_KEY){
+      FN.supabase=window.supabase.createClient(window.FN_SUPABASE_URL,window.FN_SUPABASE_KEY);
+      FN.supabase.auth.getSession().then(function(res){
+        FN.user=res&&res.data?res.data.session&&res.data.session.user:null;
+        if(FN.page==="tournaments")render();
+      });
+      FN.supabase.auth.onAuthStateChange(function(_event,session){
+        FN.user=session&&session.user?session.user:null;
+        if(FN.page==="tournaments")render();
+      });
+    }
+  }catch(e){console.error(e)}
+}
+
+function tournamentEsc(v){return esc(v)}
+function currentUser(){return FN.user}
+
+function authRegister(){
+  var email=document.getElementById('tour-email'),pw=document.getElementById('tour-password'),msg=document.getElementById('tour-auth-msg');
+  if(!FN.supabase){if(msg)msg.textContent='Base de données indisponible.';return}
+  FN.supabase.auth.signUp({email:email.value.trim(),password:pw.value}).then(function(res){
+    if(res.error){if(msg)msg.textContent=res.error.message;return}
+    if(msg)msg.textContent=res.data.session?'Compte créé.':'Compte créé. Vérifie ton e-mail si une confirmation est demandée.';
+  });
+}
+
+function authLogin(){
+  var email=document.getElementById('tour-email'),pw=document.getElementById('tour-password'),msg=document.getElementById('tour-auth-msg');
+  if(!FN.supabase){if(msg)msg.textContent='Base de données indisponible.';return}
+  FN.supabase.auth.signInWithPassword({email:email.value.trim(),password:pw.value}).then(function(res){
+    if(res.error){if(msg)msg.textContent=res.error.message;return}
+    msg.textContent='Connexion réussie.';
+  });
+}
+
+function authLogout(){
+  if(FN.supabase)FN.supabase.auth.signOut();
+}
+
+async function saveTournamentPlayer(){
+  var epic=document.getElementById('tour-epic'),display=document.getElementById('tour-display'),msg=document.getElementById('tour-player-msg');
+  if(!FN.user){if(msg)msg.textContent='Connecte-toi d’abord.';return}
+  epic=epic&&epic.value.trim();display=display&&display.value.trim();
+  if(!epic||!display){if(msg)msg.textContent='Pseudo Epic et nom à afficher requis.';return}
+  var res=await FN.supabase.from('fn_players').upsert({id:FN.user.id,display_name:display,epic_name:epic,updated_at:new Date().toISOString()},{onConflict:'id'});
+  if(res.error){if(msg)msg.textContent=res.error.message;return}
+  FN.player=epic;saveLocal();
+  if(msg)msg.textContent='Profil tournoi enregistré.';
+  await loadTournamentList();
+}
+
+async function loadTournamentList(){
+  var box=document.getElementById('tournament-list');if(!box||!FN.supabase)return;
+  box.innerHTML='<div class="card"><div class="sub">Chargement des tournois…</div></div>';
+  var tr=await FN.supabase.from('fn_tournaments').select('*').order('created_at',{ascending:false});
+  if(tr.error){box.innerHTML='<div class="notice">'+esc(tr.error.message)+'</div>';return}
+  var rows=tr.data||[];
+  var pr=await FN.supabase.from('fn_tournament_players').select('tournament_id,player_id');
+  var counts={};(pr.data||[]).forEach(function(x){counts[x.tournament_id]=(counts[x.tournament_id]||0)+1});
+  if(!rows.length){box.innerHTML='<div class="card"><div class="sub">Aucun tournoi pour le moment.</div></div>';return}
+  box.innerHTML=rows.map(function(t){
+    var count=counts[t.id]||0;
+    var joined=!!(FN.user&&pr.data&&pr.data.some(function(x){return x.tournament_id===t.id&&x.player_id===FN.user.id}));
+    var status=t.status==='open'?'Ouvert':(t.status==='live'?'En cours':(t.status==='completed'?'Terminé':'Annulé'));
+    return '<div class="card tournament-card"><div class="row"><div><div class="eyebrow">'+esc(t.game_mode)+'</div><h3>'+esc(t.name)+'</h3><div class="sub">'+count+' / '+t.max_players+' joueurs · '+status+'</div></div><div class="toolbar"><button class="btn" onclick="openTournament(\''+t.id+'\')">Ouvrir</button>'+(t.status==='open'&&!joined&&count<t.max_players?'<button class="btn primary" onclick="joinTournament(\''+t.id+'\')">S’inscrire</button>':'')+'</div></div></div>';
+  }).join('');
+}
+
+async function joinTournament(id){
+  if(!FN.user){toast('Connecte-toi pour t’inscrire');return}
+  var res=await FN.supabase.rpc('fn_join_tournament',{p_tournament_id:id});
+  if(res.error){toast(res.error.message);return}
+  toast('Inscription au tournoi confirmée');
+  await loadTournamentList();
+  await openTournament(id);
+}
+
+async function createTournament(){
+  var name=document.getElementById('new-tour-name'),mode=document.getElementById('new-tour-mode'),max=document.getElementById('new-tour-max'),msg=document.getElementById('tour-create-msg');
+  if(!FN.user){if(msg)msg.textContent='Connecte-toi pour créer un tournoi.';return}
+  var v={name:name.value.trim(),game_mode:mode.value,max_players:Number(max.value),created_by:FN.user.id};
+  if(!v.name){if(msg)msg.textContent='Nom du tournoi requis.';return}
+  var res=await FN.supabase.from('fn_tournaments').insert(v).select().single();
+  if(res.error){if(msg)msg.textContent=res.error.message;return}
+  msg.textContent='Tournoi créé.';
+  await loadTournamentList();
+  await openTournament(res.data.id);
+}
+
+async function startTournament(id){
+  var res=await FN.supabase.rpc('fn_start_tournament',{p_tournament_id:id});
+  if(res.error){toast(res.error.message);return}
+  toast('Tournoi démarré');
+  await openTournament(id);
+}
+
+function playerName(map,id){return id&&map[id]?map[id].display_name:'—'}
+
+async function openTournament(id){
+  FN.selectedTournament=id;
+  var area=document.getElementById('tournament-detail');if(!area)return;
+  area.innerHTML='<div class="card"><div class="sub">Chargement…</div></div>';
+  var t=await FN.supabase.from('fn_tournaments').select('*').eq('id',id).single();
+  if(t.error){area.innerHTML='<div class="notice">'+esc(t.error.message)+'</div>';return}
+  var ps=await FN.supabase.from('fn_tournament_players').select('player_id,seed,status,joined_at').eq('tournament_id',id).order('seed',{ascending:true,nullsFirst:false});
+  var ids=(ps.data||[]).map(function(x){return x.player_id});
+  var pl=ids.length?await FN.supabase.from('fn_players').select('id,display_name,epic_name').in('id',ids):{data:[],error:null};
+  var pmap={};(pl.data||[]).forEach(function(p){pmap[p.id]=p});
+  var ms=await FN.supabase.from('fn_matches').select('*').eq('tournament_id',id).order('round_no',{ascending:true}).order('match_no',{ascending:true});
+
+  var organizer=!!(FN.user&&t.data.created_by===FN.user.id);
+  var roster=(ps.data||[]).map(function(p){
+    return '<div class="row"><span>'+esc(playerName(pmap,p.player_id))+'</span><span class="tag">'+(p.status==='eliminated'?'Éliminé':('Seed '+(p.seed||'?')))+'</span></div>';
+  }).join('')||'<div class="sub">Aucun joueur inscrit.</div>';
+
+  var matchesByRound={};
+  (ms.data||[]).forEach(function(m){(matchesByRound[m.round_no]||(matchesByRound[m.round_no]=[])).push(m)});
+  var rounds=Object.keys(matchesByRound).sort(function(a,b){return Number(a)-Number(b)}).map(function(r){
+    return '<div class="tournament-round"><div class="section-title">Tour '+r+'</div>'+matchesByRound[r].map(function(m){
+      var p1=playerName(pmap,m.player1_id),p2=playerName(pmap,m.player2_id);
+      var ready=m.status==='ready'&&m.player1_id&&m.player2_id;
+      var report='';
+      if(ready&&(FN.user&& (FN.user.id===m.player1_id||FN.user.id===m.player2_id||organizer))){
+        report='<div class="match-report"><select id="winner-'+m.id+'"><option value="'+m.player1_id+'">'+esc(p1)+'</option><option value="'+m.player2_id+'">'+esc(p2)+'</option></select><input id="score1-'+m.id+'" type="number" min="0" value="1" class="score-input"><input id="score2-'+m.id+'" type="number" min="0" value="0" class="score-input"><button class="btn primary" onclick="reportMatch(\''+m.id+'\',\''+m.player1_id+'\',\''+m.player2_id+'\')">Valider</button></div>';
+      }
+      return '<div class="card match-card"><div class="row"><div><strong>'+esc(p1)+'</strong><span class="sub"> vs </span><strong>'+esc(p2)+'</strong></div><span class="tag">'+(m.status==='completed'?'Terminé':(ready?'Prêt':'En attente'))+(m.status==='completed'?' · '+m.score1+'-'+m.score2:'')+'</span></div>'+report+'</div>';
+    }).join('')+'</div>';
+  }).join('');
+
+  area.innerHTML='<div class="card"><div class="toolbar" style="justify-content:space-between"><div><div class="eyebrow">'+esc(t.data.game_mode)+'</div><h2>'+esc(t.data.name)+'</h2><div class="sub">Statut : '+esc(t.data.status)+' · '+(ps.data||[]).length+' / '+t.data.max_players+' joueurs</div></div><div class="toolbar">'+(organizer&&t.data.status==='open'&&(ps.data||[]).length===t.data.max_players?'<button class="btn primary" onclick="startTournament(\''+id+'\')">Démarrer</button>':'')+'<button class="btn" onclick="loadTournamentList()">Actualiser</button></div></div></div><div style="height:12px"></div><section class="grid g2"><div class="card"><div class="section-title">Joueurs inscrits</div><div class="list">'+roster+'</div></div><div>'+rounds+'</div></section>';
+}
+
+async function reportMatch(id,p1,p2){
+  var winner=document.getElementById('winner-'+id),s1=document.getElementById('score1-'+id),s2=document.getElementById('score2-'+id);
+  if(!winner)return;
+  var res=await FN.supabase.rpc('fn_report_match',{p_match_id:id,p_winner_id:winner.value,p_score1:Number(s1.value),p_score2:Number(s2.value)});
+  if(res.error){toast(res.error.message);return}
+  toast('Résultat enregistré');
+  if(FN.selectedTournament)await openTournament(FN.selectedTournament);
+}
+
+function tournaments(){
+  if(!FN.supabase){
+    layout('<div class="notice">Le système de tournois est en cours de connexion à la base de données.</div>');
+    return;
+  }
+  if(!FN.user){
+    layout('<section class="hero compact-hero"><div class="eyebrow">TOURNOIS</div><h2>Tournois Lion Dynasty</h2><p>Inscris-toi pour participer aux tournois entre joueurs enregistrés sur le site.</p></section><section class="card auth-card"><div class="section-title">Créer ou rejoindre ton compte</div><div class="toolbar"><input id="tour-email" class="search" placeholder="E-mail"><input id="tour-password" class="search" type="password" placeholder="Mot de passe"><button class="btn primary" onclick="authLogin()">Se connecter</button><button class="btn" onclick="authRegister()">Créer un compte</button></div><div id="tour-auth-msg" class="sub" style="margin-top:10px"></div></section><div style="height:16px"></div><div class="notice">Un compte est nécessaire pour apparaître comme joueur inscrit. Les tournois et résultats sont enregistrés en ligne.</div>');
+    return;
+  }
+
+  layout('<section class="hero compact-hero"><div class="toolbar" style="justify-content:space-between"><div><div class="eyebrow">TOURNOIS</div><h2>Tournois Lion Dynasty</h2><p>Tournois entre joueurs inscrits, avec inscriptions et tableau de matchs.</p></div><button class="btn" onclick="authLogout()">Se déconnecter</button></div></section><section class="card"><div class="section-title">Mon profil joueur</div><div class="toolbar"><input id="tour-display" class="search" placeholder="Nom affiché"><input id="tour-epic" class="search" placeholder="Pseudo Epic"><button class="btn primary" onclick="saveTournamentPlayer()">Enregistrer</button></div><div id="tour-player-msg" class="sub" style="margin-top:10px"></div></section><div style="height:16px"></div><section class="card"><div class="section-title">Créer un tournoi</div><div class="toolbar"><input id="new-tour-name" class="search" placeholder="Nom du tournoi"><select id="new-tour-mode" class="search"><option>Solo</option><option>Duo</option><option>Escouades</option><option>Zéro construction</option></select><select id="new-tour-max" class="search"><option value="4">4 joueurs</option><option value="8" selected>8 joueurs</option><option value="16">16 joueurs</option></select><button class="btn primary" onclick="createTournament()">Créer</button></div><div id="tour-create-msg" class="sub" style="margin-top:10px"></div></section><div style="height:16px"></div><div id="tournament-list" class="grid g2"></div><div style="height:16px"></div><div id="tournament-detail"></div>');
+  loadTournamentList();
 }
 
 async function loadCosmetics(){
@@ -553,4 +715,5 @@ function render(){
 }
 
 loadLocal();
+initSupabase();
 render();
