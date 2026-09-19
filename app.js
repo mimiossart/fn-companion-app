@@ -305,17 +305,20 @@ function renderProfileStats(){
   var s=FN.stats;
   if(!s){box.innerHTML='<div class="sub">Aucune statistique chargée.</div>';return}
 
-  var st=s.normalized||s.stats||s;
+  var rawStats=s.stats||s;
+  var normalized=s.normalized||null;
+  var hasNormalized=normalized&&Object.keys(normalized).some(function(k){return normalized[k]!=null});
+  var st=hasNormalized?normalized:rawStats;
   var progress=s.progress||null;
-  var wins=deepFind(st,['wins','br_wins','brWins','br_wins_total','wins_total','victories']);
+  var wins=deepFind(st,['wins','br_wins','brWins','br_wins_total','br_placetop1','wins_total','victories']);
   var kills=deepFind(st,['kills','br_kills','brKills','br_kills_total','kills_total','eliminations']);
   var deaths=deepFind(st,['deaths','br_deaths','brDeaths','br_deaths_total']);
-  var matches=deepFind(st,['matches','matchesPlayed','br_matches','br_matches_total','matches_total']);
+  var matches=deepFind(st,['matches','matchesPlayed','br_matches','br_matches_total','br_matchesplayed','matches_total']);
   var kd=deepFind(st,['kd','kdratio','killDeathRatio','br_kd','br_kd_ratio']);
   var winRate=deepFind(st,['winRate','winrate','br_winrate','br_winrate_total','win_rate']);
-  var top3=deepFind(st,['top3','br_top3','br_top3_total']);
-  var top5=deepFind(st,['top5','br_top5','br_top5_total']);
-  var top10=deepFind(st,['top10','br_top10','br_top10_total']);
+  var top3=deepFind(st,['top3','br_top3','br_top3_total','br_placetop3']);
+  var top5=deepFind(st,['top5','br_top5','br_top5_total','br_placetop5']);
+  var top10=deepFind(st,['top10','br_top10','br_top10_total','br_placetop10']);
   var rank=deepFind(s,['rank','displayRank','currentRank','division','tier']);
   var rankPoints=deepFind(s,['rankPoints','points','rating','rp']);
   var level=deepFind(progress,['level','currentLevel','accountLevel','seasonLevel','battlePassLevel']);
