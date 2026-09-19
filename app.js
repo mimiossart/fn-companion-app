@@ -150,33 +150,56 @@ async function shop(){
     var d=await r.json();
     if(!r.ok)throw new Error(d.error||"Boutique indisponible");
     var payload=d&&d.data?d.data:d;
-    var sections=[];
-    ["featured","daily","specialFeatured","specialDaily","votes","voteWinners"].forEach(function(key){
-      var section=payload&&payload[key];
-      if(section&&Array.isArray(section.entries)){
-        sections.push({name:section.name||key,entries:section.entries});
-      }
-    });
     var entries=[];
-    sections.forEach(function(section){
-      section.entries.forEach(function(e){
-        if(!e||typeof e!=="object")return;
-        var items=Array.isArray(e.items)?e.items:[];
-        if(!items.length)return;
+    function collectShopOffers(node,sectionName,seen){
+      if(node==null)return;
+      if(Array.isArray(node)){
+        node.forEach(function(v){collectShopOffers(v,sectionName,seen);});
+        return;
+      }
+      if(typeof node!=="object")return;
+
+      var items=Array.isArray(node.items)?node.items:[];
+      if(items.length && (node.finalPrice!=null || node.regularPrice!=null || node.price!=null || node.offerId)){
         var names=items.map(function(it){return it&&it.name?it.name:""}).filter(Boolean);
         var first=items[0]||{};
+        var img=(first.images&&(first.images.featured||first.images.icon||first.images.smallIcon))||"";
+        if(!img && node.bundle && node.bundle.image)img=node.bundle.image;
         entries.push({
-          name:names.join(" + ")||"Offre Fortnite",
-          image:(first.images&&(first.images.featured||first.images.icon||first.images.smallIcon))||"",
-          rarity:(first.rarity&&(first.rarity.displayValue||first.rarity.value))||"",
-          price:e.finalPrice!=null?e.finalPrice:(e.regularPrice!=null?e.regularPrice:null),
-          section:section.name,
-          offerId:e.offerId||"",
+          name:names.join(" + ")||node.offerName||node.name||"Offre Fortnite",
+          image:img,
+          rarity:(first.rarity&&(first.rarity.displayValue||first.rarity.value))||node.rarity||"",
+          price:node.finalPrice!=null?node.finalPrice:(node.regularPrice!=null?node.regularPrice:node.price),
+          regularPrice:node.regularPrice,
+          section:sectionName||node.sectionName||node.sectionId||"Boutique",
+          offerId:node.offerId||"",
           itemCount:items.length
         });
+      }
+
+      Object.keys(node).forEach(function(key){
+        if(key==="items")return;
+        var child=node[key];
+        if(child&&typeof child==="object"){
+          var nextSection=sectionName;
+          if(["featured","daily","specialFeatured","specialDaily","votes","voteWinners"].indexOf(key)>=0){
+            if(Array.isArray(child))nextSection=key;
+            else if(child.name)nextSection=child.name;
+            else nextSection=key;
+          }
+          collectShopOffers(child,nextSection,seen);
+        }
       });
+    }
+    collectShopOffers(payload,"Boutique",{});
+    var dedupe={};
+    entries=entries.filter(function(x){
+      if(!x.name||x.name==="Offre Fortnite")return false;
+      var key=(x.offerId||x.name)+"|"+String(x.price);
+      if(dedupe[key])return false;
+      dedupe[key]=true;
+      return true;
     });
-    entries=entries.filter(function(x){return x.name&&x.name!=="Offre Fortnite";});
     entries.sort(function(a,b){
       return String(a.section).localeCompare(String(b.section))||String(a.name).localeCompare(String(b.name));
     });
