@@ -66,64 +66,59 @@ export default async function handler(req,res){
         return String(key||"").toLowerCase().replace(/[^a-z0-9]/g,"");
       }
 
-      function findExact(obj,keys){
-        if(obj==null||typeof obj!=="object")return null;
-        const wanted=keys.map(normalizeStatKey);
-        let found=null;
+      function collectNumbers(obj,patterns){
+        const out=[];
+        if(obj==null||typeof obj!=="object")return out;
         (function walk(node){
-          if(found!=null||node==null||typeof node!=="object")return;
+          if(node==null||typeof node!=="object")return;
           if(Array.isArray(node)){node.forEach(walk);return}
-          for(const key of Object.keys(node)){
+          Object.keys(node).forEach(function(key){
             const nk=normalizeStatKey(key);
-            if(wanted.indexOf(nk)>=0){
+            if(patterns.some(function(pattern){return nk.indexOf(normalizeStatKey(pattern))>=0})){
               let v=node[key];
               if(v&&typeof v==="object"){
                 if(v.value!=null)v=v.value;
                 else if(v.total!=null)v=v.total;
               }
-              if(v!=null&&v!==""){found=v;return}
+              if(typeof v==="number" && isFinite(v))out.push(v);
+              else if(typeof v==="string"&&v.trim()!==""&&isFinite(Number(v)))out.push(Number(v));
             }
-          }
-          for(const key of Object.keys(node))walk(node[key]);
+          });
+          Object.keys(node).forEach(function(key){walk(node[key]);});
         })(obj);
-        return found;
+        return out;
+      }
+
+      function sumStats(patterns){
+        const values=collectNumbers(raw,patterns);
+        if(!values.length)return null;
+        return values.reduce(function(total,v){return total+v},0);
+      }
+
+      function directStat(patterns){
+        const values=collectNumbers(raw,patterns);
+        return values.length?values[0]:null;
       }
 
       const normalized={
-        wins:findExact(raw,["br_wins_total","wins","victories"]),
-        kills:findExact(raw,["br_kills_total","kills","eliminations"]),
-        deaths:findExact(raw,["br_deaths_total","deaths"]),
-        matches:findExact(raw,["br_matches_total","br_matches_played","matchesPlayed","matches"]),
-        kd:findExact(raw,["br_kd","br_kd_ratio","kd","kdratio","killDeathRatio"]),
-        winRate:findExact(raw,["br_winrate","br_win_rate","winRate","winrate"]),
-        top1:findExact(raw,["br_placetop1","placetop1","top1"]),
-        top3:findExact(raw,["br_placetop3","placetop3","top3"]),
-        top5:findExact(raw,["br_placetop5","placetop5","top5"]),
-        top10:findExact(raw,["br_placetop10","placetop10","top10"])
+        wins:sumStats(["br_placetop1","br_wins_total"]),
+        kills:sumStats(["br_kills"]),
+        deaths:sumStats(["br_deaths"]),
+        matches:sumStats(["br_matchesplayed"]),
+        minutes:sumStats(["br_minutesplayed"]),
+        top3:sumStats(["br_placetop3"]),
+        top5:sumStats(["br_placetop5"]),
+        top10:sumStats(["br_placetop10"]),
+        kd:directStat(["br_kd"]),
+        winRate:directStat(["br_winrate"])
       };
 
-      let seasonStats=null,progress=null,ranked=null;
-      try{
-        const seasonRes=await fetch(DATA_API+"/api/v1/profile/stats?displayName="+encodeURIComponent(name)+"&timeWindow=season",{headers});
-        if(seasonRes.ok){
-          const seasonJson=await seasonRes.json();
-          seasonStats=seasonJson.data!==undefined?seasonJson.data:seasonJson;
-        }
-      }catch(_){}
-      try{
-        const progressRes=await fetch(DATA_API+"/api/v1/profile/progress?displayName="+encodeURIComponent(name),{headers});
-        if(progressRes.ok){
-          const progressJson=await progressRes.json();
-          progress=progressJson.data!==undefined?progressJson.data:progressJson;
-        }
-      }catch(_){}
-      try{
-        const rankedRes=await fetch(DATA_API+"/api/v1/profile/ranked?displayName="+encodeURIComponent(name),{headers});
-        if(rankedRes.ok){
-          const rankedJson=await rankedRes.json();
-          ranked=rankedJson.data!==undefined?rankedJson.data:rankedJson;
-        }
-      }catch(_){}
+      if(normalized.kd==null && normalized.kills!=null && normalized.deaths){
+        normalized.kd=normalized.kills/normalized.deaths;
+      }
+      if(normalized.winRate==null && normalized.wins!=null && normalized.matches){
+        normalized.winRate=(normalized.wins/normalized.matches)*100;
+      }
 
       return res.status(200).json({
         ok:true,
