@@ -649,7 +649,13 @@ function renderProfileStats(){
   var st=hasNormalized?normalized:rawStats;
   var progress=s.progress||null;
 
+  var rawForLookup=rawStats||s;
   function pick(obj,keys){return deepFind(obj,keys)}
+  function pickFallback(keys){
+    var v=pick(st,keys);
+    if(v==null)v=pick(rawForLookup,keys);
+    return v;
+  }
   function val(v){return v==null||v===''?'—':(typeof v==='number'?v.toLocaleString('fr-FR'):esc(v))}
   function modeStats(source,patterns){
     if(!source)return null;
@@ -731,16 +737,16 @@ function renderProfileStats(){
     return '<div class="card"><div class="section-title">'+m.label+'</div><div class="list"><div class="row"><span>Victoires</span><strong>'+val(ms.wins)+'</strong></div><div class="row"><span>Éliminations</span><strong>'+val(ms.kills)+'</strong></div><div class="row"><span>K/D</span><strong>'+val(ms.kd)+'</strong></div><div class="row"><span>Parties</span><strong>'+val(ms.matches)+'</strong></div><div class="row"><span>Taux de victoire</span><strong>'+val(ms.winRate)+(ms.winRate!=null?' %':'')+'</strong></div></div></div>';
   }).join('');
 
-  var wins=pick(st,['wins','br_wins','brWins','br_wins_total','br_placetop1','wins_total','victories']);
-  var kills=pick(st,['kills','br_kills','brKills','br_kills_total','kills_total','eliminations']);
-  var deaths=pick(st,['deaths','br_deaths','brDeaths','br_deaths_total']);
-  var matches=pick(st,['matches','matchesPlayed','br_matches','br_matches_total','br_matchesplayed','matches_total']);
-  var kd=pick(st,['kd','kdratio','killDeathRatio','br_kd','br_kd_ratio']);
-  var winRate=pick(st,['winRate','winrate','br_winrate','br_winrate_total','win_rate']);
-  var top1=pick(st,['top1','br_placetop1','placetop1','wins','br_wins_total']);
-  var top3=pick(st,['top3','br_placetop3','placetop3']);
-  var top5=pick(st,['top5','br_placetop5','placetop5']);
-  var top10=pick(st,['top10','br_placetop10','placetop10']);
+  var wins=pickFallback(['wins','br_wins','brWins','br_wins_total','br_placetop1','wins_total','victories']);
+  var kills=pickFallback(['kills','br_kills','brKills','br_kills_total','kills_total','eliminations']);
+  var deaths=pickFallback(['deaths','br_deaths','brDeaths','br_deaths_total']);
+  var matches=pickFallback(['matches','matchesPlayed','br_matches','br_matches_total','br_matchesplayed','matches_total']);
+  var kd=pickFallback(['kd','kdratio','killDeathRatio','br_kd','br_kd_ratio']);
+  var winRate=pickFallback(['winRate','winrate','br_winrate','br_winrate_total','win_rate']);
+  var top1=pickFallback(['top1','br_placetop1','placetop1','wins','br_wins_total']);
+  var top3=pickFallback(['top3','br_placetop3','placetop3']);
+  var top5=pickFallback(['top5','br_placetop5','placetop5']);
+  var top10=pickFallback(['top10','br_placetop10','placetop10']);
   var rank=pick(s,['rank','displayRank','currentRank','division','tier']);
   var rankPoints=pick(s,['rankPoints','points','rating','rp']);
   var level=deepFind(progress,['level','currentLevel','accountLevel','seasonLevel','battlePassLevel']);
