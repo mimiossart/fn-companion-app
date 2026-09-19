@@ -475,90 +475,86 @@ async function shop(){
       if(!d)throw fetchError;
       toast("Boutique : dernières données disponibles");
     }
-    var payload=d&&d.data?d.data:d;
+
+    var payload=d&&d.data!==undefined?d.data:d;
     var entries=[];
-    function pushOffer(entry,sectionName){
-      if(!entry||typeof entry!=="object")return;
-      var items=Array.isArray(entry.items)?entry.items:[];
-      if(items.length){
+
+    function addSection(section,sectionName){
+      if(!section)return;
+      var list=Array.isArray(section)?section:(Array.isArray(section.entries)?section.entries:null);
+      if(!list)return;
+      list.forEach(function(entry){
+        if(!entry||typeof entry!=="object")return;
+        var items=Array.isArray(entry.items)?entry.items:[];
+        if(!items.length){
+          var directName=entry.name||entry.displayName||entry.title;
+          if(directName){
+            entries.push({
+              name:directName,
+              image:(entry.images&&(entry.images.featured||entry.images.icon||entry.images.smallIcon))||entry.image||"",
+              rarity:(entry.rarity&&(entry.rarity.displayValue||entry.rarity.value))||entry.rarity||"",
+              price:entry.finalPrice!=null?entry.finalPrice:(entry.price!=null?entry.price:null),
+              section:sectionName||"Boutique",
+              offerId:entry.offerId||entry.id||"",
+              itemCount:1
+            });
+          }
+          return;
+        }
         items.forEach(function(it){
           if(!it||typeof it!=="object")return;
           entries.push({
-            name:it.name||it.displayName||entry.name||"Objet Fortnite",
+            name:it.name||it.displayName||"Objet Fortnite",
             image:(it.images&&(it.images.featured||it.images.icon||it.images.smallIcon))||it.image||"",
             rarity:(it.rarity&&(it.rarity.displayValue||it.rarity.value))||it.rarity||"",
-            price:it.finalPrice!=null?it.finalPrice:(it.price!=null?it.price:(entry.finalPrice!=null?entry.finalPrice:(entry.price!=null?entry.price:null))),
-            section:sectionName||entry.section||entry.category||"Boutique",
+            price:entry.finalPrice!=null?entry.finalPrice:(entry.price!=null?entry.price:null),
+            section:sectionName||"Boutique",
             offerId:entry.offerId||entry.id||"",
             itemCount:1
           });
         });
-        return;
-      }
-      var price=entry.finalPrice!=null?entry.finalPrice:(entry.price!=null?entry.price:(entry.vbucks!=null?entry.vbucks:null));
-      var image=(entry.images&&(entry.images.featured||entry.images.icon||entry.images.smallIcon))||entry.image||"";
-      var name=entry.name||entry.displayName||entry.title;
-      if(name&&(price!=null||image||entry.id||entry.offerId)){
-        entries.push({
-          name:name,image:image,
-          rarity:(entry.rarity&&(entry.rarity.displayValue||entry.rarity.value))||entry.rarity||"",
-          price:price,section:sectionName||entry.section||entry.category||"Boutique",
-          offerId:entry.offerId||entry.id||"",itemCount:1
+      });
+    }
+
+    if(Array.isArray(payload)){
+      addSection(payload,"Boutique");
+    }else if(payload&&typeof payload==="object"){
+      addSection(payload.entries,payload.name||"Boutique");
+      ["featured","daily","specialFeatured","specialDaily","votes","voteWinners","specialOffers","shop"].forEach(function(key){
+        if(payload[key])addSection(payload[key],key);
+      });
+      if(payload.data&&typeof payload.data==="object"&&payload.data!==payload){
+        var nested=payload.data;
+        addSection(nested.entries,nested.name||"Boutique");
+        ["featured","daily","specialFeatured","specialDaily","votes","voteWinners","specialOffers","shop"].forEach(function(key){
+          if(nested[key])addSection(nested[key],key);
         });
       }
     }
-    function parseShop(node,sectionName){
-      if(node==null)return;
-      if(Array.isArray(node)){
-        node.forEach(function(v){parseShop(v,sectionName);});
-        return;
-      }
-      if(typeof node!=="object")return;
-
-      var localSection=sectionName;
-      if(node.name && (Array.isArray(node.entries)||Array.isArray(node.items))) localSection=String(node.name);
-
-      if(Array.isArray(node.entries)){
-        node.entries.forEach(function(v){pushOffer(v,localSection);});
-      }
-      if(Array.isArray(node.items)){
-        pushOffer(node,localSection);
-      } else {
-        pushOffer(node,localSection);
-      }
-
-      Object.keys(node).forEach(function(key){
-        if(key==="entries"||key==="items"||key==="images"||key==="rarity")return;
-        var child=node[key];
-        if(child&&typeof child==="object"){
-          var next=localSection;
-          if(["featured","daily","specialFeatured","specialDaily","votes","voteWinners","specialOffers","shop"].indexOf(key)>=0){
-            next=String((child&&child.name)||key);
-          }
-          parseShop(child,next);
-        }
-      });
-    }
-    parseShop(payload,"Boutique");
 
     var dedupe={};
     entries=entries.filter(function(x){
       if(!x.name)return false;
-      var key=(x.offerId||x.name)+"|"+String(x.price);
-      if(dedupe[key])return false;
-      dedupe[key]=true;
+      var k=(x.offerId||x.name)+"|"+String(x.price);
+      if(dedupe[k])return false;
+      dedupe[k]=true;
       return true;
     });
     entries.sort(function(a,b){
       return String(a.section).localeCompare(String(b.section))||String(a.name).localeCompare(String(b.name));
     });
+
     var box=document.getElementById("fn-shop");
-    box.innerHTML=entries.slice(0,60).map(function(x){
-      return '<article class="card item-card"><div class="cosmetic-img">'+(x.image?'<img src="'+esc(x.image)+'" alt="'+esc(x.name)+'" loading="lazy">':'🛒')+'</div><div class="item-body"><div class="eyebrow" style="font-size:9px">'+esc(x.section||"Boutique")+'</div><strong>'+esc(x.name)+'</strong><div class="sub">'+(x.price!=null?esc(x.price)+" V-Bucks":"Prix non indiqué")+' · '+esc(x.itemCount||1)+" objet"+((x.itemCount||1)>1?"s":"")+'</div></div></article>';
-    }).join("")||'<div class="card"><div class="sub">Aucune offre retournée.</div></div>';
+    if(!entries.length){
+      box.innerHTML='<div class="notice">Aucune offre n’a été trouvée dans la réponse de la boutique.</div>';
+      return;
+    }
+    box.innerHTML=entries.slice(0,100).map(function(x){
+      return '<article class="card item-card"><div class="cosmetic-img">'+(x.image?'<img src="'+esc(x.image)+'" alt="'+esc(x.name)+'" loading="lazy">':'🛒')+'</div><div class="item-body"><div class="eyebrow" style="font-size:9px">'+esc(x.section||"Boutique")+'</div><strong>'+esc(x.name)+'</strong><div class="sub">'+(x.price!=null?esc(x.price)+" V-Bucks":"Prix non indiqué")+'</div></div></article>';
+    }).join("");
   }catch(e){
     var msg=e&&e.message?e.message:"Erreur inconnue";
-    document.getElementById("fn-shop").innerHTML='<div class="notice">Impossible de charger la boutique : '+esc(msg)+'<br><span class="sub">Actualise la page dans quelques secondes.</span></div>';
+    document.getElementById("fn-shop").innerHTML='<div class="notice">Impossible de charger la boutique : '+esc(msg)+'</div>';
   }
 }
 
