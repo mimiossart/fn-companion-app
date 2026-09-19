@@ -23,7 +23,7 @@ export default async function handler(req,res){
       const account=await readJson(accountRes);
       if(!account.ok){
         const apiMsg=account.data&&(account.data.error||account.data.message);
-        return res.status(account.status).json({error:apiMsg||("Impossible de trouver le joueur ""+name+"".")});
+        return res.status(account.status).json({error:apiMsg||("Impossible de trouver le joueur \""+name+"\".")});
       }
 
       const accountRoot=account.data&&account.data.data!==undefined?account.data.data:account.data;
