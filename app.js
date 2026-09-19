@@ -293,6 +293,33 @@ async function openTournament(id){
     return '<div class="row"><span>'+esc(playerName(pmap,p.player_id))+'</span><span class="tag">'+(p.status==='eliminated'?'Éliminé':('Seed '+(p.seed||'?')))+'</span></div>';
   }).join('')||'<div class="sub">Aucun joueur inscrit.</div>';
 
+  var standings={};
+  (ps.data||[]).forEach(function(p){
+    standings[p.player_id]={points:0,wins:0,losses:0,matches:0};
+  });
+  (ms.data||[]).forEach(function(m){
+    if(m.status!=='completed'||!m.winner_id||!m.player1_id||!m.player2_id)return;
+    var loser=m.winner_id===m.player1_id?m.player2_id:m.player1_id;
+    if(standings[m.winner_id]){
+      standings[m.winner_id].wins++;
+      standings[m.winner_id].matches++;
+      standings[m.winner_id].points+=3;
+    }
+    if(standings[loser]){
+      standings[loser].losses++;
+      standings[loser].matches++;
+    }
+  });
+  var leaderboard=Object.keys(standings).map(function(pid){
+    standings[pid].player_id=pid;
+    return standings[pid];
+  }).sort(function(a,b){
+    return b.points-a.points||b.wins-a.wins||b.matches-a.matches;
+  });
+  var leaderboardHtml=leaderboard.map(function(s,i){
+    return '<div class="row"><div><strong>#'+(i+1)+' '+esc(playerName(pmap,s.player_id))+'</strong><div class="sub">'+s.wins+' victoire'+(s.wins>1?'s':'')+' · '+s.losses+' défaite'+(s.losses>1?'s':'')+' · '+s.matches+' match'+(s.matches>1?'s':'')+'</div></div><span class="tag">'+s.points+' pts</span></div>';
+  }).join('')||'<div class="sub">Aucun résultat enregistré.</div>';
+
   var matchesByRound={};
   (ms.data||[]).forEach(function(m){(matchesByRound[m.round_no]||(matchesByRound[m.round_no]=[])).push(m)});
   var rounds=Object.keys(matchesByRound).sort(function(a,b){return Number(a)-Number(b)}).map(function(r){
@@ -301,13 +328,18 @@ async function openTournament(id){
       var ready=m.status==='ready'&&m.player1_id&&m.player2_id;
       var report='';
       if(ready&&(FN.user&& (FN.user.id===m.player1_id||FN.user.id===m.player2_id||organizer))){
-        report='<div class="match-report"><select id="winner-'+m.id+'"><option value="'+m.player1_id+'">'+esc(p1)+'</option><option value="'+m.player2_id+'">'+esc(p2)+'</option></select><input id="score1-'+m.id+'" type="number" min="0" value="1" class="score-input"><input id="score2-'+m.id+'" type="number" min="0" value="0" class="score-input"><button class="btn primary" onclick="reportMatch(\''+m.id+'\',\''+m.player1_id+'\',\''+m.player2_id+'\')">Valider</button></div>';
+        report='<div class="match-report"><select id="winner-'+m.id+'"><option value="'+m.player1_id+'">'+esc(p1)+'</option><option value="'+m.player2_id+'">'+esc(p2)+'</option></select><input id="score1-'+m.id+'" type="number" min="0" value="1" class="score-input"><input id="score2-'+m.id+'" type="number" min="0" value="0" class="score-input"><button class="btn primary" onclick="reportMatch(\\''+m.id+'\\',\\''+m.player1_id+'\\',\\''+m.player2_id+'\\')">Valider</button></div>';
       }
-      return '<div class="card match-card"><div class="row"><div><strong>'+esc(p1)+'</strong><span class="sub"> vs </span><strong>'+esc(p2)+'</strong></div><span class="tag">'+(m.status==='completed'?'Terminé':(ready?'Prêt':'En attente'))+(m.status==='completed'?' · '+m.score1+'-'+m.score2:'')+'</span></div>'+report+'</div>';
+      var outcome='';
+      if(m.status==='completed'&&FN.user){
+        if(m.winner_id===FN.user.id)outcome='<span class="tag">Gagné · +3 pts</span>';
+        else if(m.player1_id===FN.user.id||m.player2_id===FN.user.id)outcome='<span class="tag">Perdu · +0 pt</span>';
+      }
+      return '<div class="card match-card"><div class="row"><div><strong>'+esc(p1)+'</strong><span class="sub"> vs </span><strong>'+esc(p2)+'</strong></div><div class="toolbar" style="gap:6px"><span class="tag">'+(m.status==='completed'?'Terminé':(ready?'Prêt':'En attente'))+(m.status==='completed'?' · '+m.score1+'-'+m.score2:'')+'</span>'+outcome+'</div></div>'+report+'</div>';
     }).join('')+'</div>';
   }).join('');
 
-  area.innerHTML='<div class="card"><div class="toolbar" style="justify-content:space-between"><div><div class="eyebrow">'+esc(t.data.game_mode)+'</div><h2>'+esc(t.data.name)+'</h2><div class="sub">Statut : '+esc(t.data.status)+' · '+(ps.data||[]).length+' / '+t.data.max_players+' joueurs</div></div><div class="toolbar">'+(organizer&&t.data.status==='open'&&(ps.data||[]).length===t.data.max_players?'<button class="btn primary" onclick="startTournament(\''+id+'\')">Démarrer</button>':'')+'<button class="btn" onclick="loadTournamentList()">Actualiser</button></div></div></div><div style="height:12px"></div><section class="grid g2"><div class="card"><div class="section-title">Joueurs inscrits</div><div class="list">'+roster+'</div></div><div>'+rounds+'</div></section>';
+  area.innerHTML='<div class="card"><div class="toolbar" style="justify-content:space-between"><div><div class="eyebrow">'+esc(t.data.game_mode)+'</div><h2>'+esc(t.data.name)+'</h2><div class="sub">Statut : '+esc(t.data.status)+' · '+(ps.data||[]).length+' / '+t.data.max_players+' joueurs</div></div><div class="toolbar">'+(organizer&&t.data.status==='open'&&(ps.data||[]).length===t.data.max_players?'<button class="btn primary" onclick="startTournament(\\''+id+'\\')">Démarrer</button>':'')+'<button class="btn" onclick="loadTournamentList()">Actualiser</button></div></div></div><div style="height:12px"></div><div class="notice">Système de points : <strong>3 points par victoire</strong>, <strong>0 point en cas de défaite</strong>. Le classement se met à jour dès qu’un résultat est validé.</div><div style="height:12px"></div><section class="grid g2"><div><div class="card"><div class="section-title">Classement du tournoi</div><div class="list">'+leaderboardHtml+'</div></div><div style="height:12px"></div><div class="card"><div class="section-title">Joueurs inscrits</div><div class="list">'+roster+'</div></div></div><div>'+rounds+'</div></section>';
 }
 
 async function reportMatch(id,p1,p2){
