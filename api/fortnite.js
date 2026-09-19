@@ -43,28 +43,65 @@ export default async function handler(req,res){
 
       function deepFind(obj,keys){
         if(obj==null)return null;
-        for(let i=0;i<keys.length;i++){
-          if(typeof obj==="object"&&Object.prototype.hasOwnProperty.call(obj,keys[i])&&obj[keys[i]]!=null)return obj[keys[i]];
-        }
-        if(typeof obj!=="object")return null;
-        const vals=Array.isArray(obj)?obj:Object.keys(obj).map(k=>obj[k]);
-        for(let i=0;i<vals.length;i++){
-          const found=deepFind(vals[i],keys);
-          if(found!=null)return found;
+        if(typeof obj==="object"){
+          for(let i=0;i<keys.length;i++){
+            if(Object.prototype.hasOwnProperty.call(obj,keys[i])&&obj[keys[i]]!=null){
+              const v=obj[keys[i]];
+              if(typeof v==="object"&&v.value!=null)return v.value;
+              return v;
+            }
+          }
+          const vals=Array.isArray(obj)?obj:Object.keys(obj).map(k=>obj[k]);
+          for(let i=0;i<vals.length;i++){
+            const found=deepFind(vals[i],keys);
+            if(found!=null)return found;
+          }
         }
         return null;
       }
 
+      function normalizeStatKey(key){
+        return String(key||"").toLowerCase().replace(/[^a-z0-9]/g,"");
+      }
+      function findByPattern(obj,patterns){
+        if(obj==null||typeof obj!=="object")return null;
+        const visit=function(node){
+          if(node==null)return null;
+          if(Array.isArray(node)){
+            for(let i=0;i<node.length;i++){const v=visit(node[i]);if(v!=null)return v;}
+            return null;
+          }
+          if(typeof node!=="object")return null;
+          for(const key of Object.keys(node)){
+            const nk=normalizeStatKey(key);
+            if(patterns.some(p=>nk.indexOf(p)>=0)){
+              let value=node[key];
+              if(value&&typeof value==="object"){
+                if(value.value!=null)value=value.value;
+                else if(value.total!=null)value=value.total;
+              }
+              if(typeof value==="number" || (typeof value==="string"&&value.trim()!==""))return value;
+            }
+          }
+          for(const key of Object.keys(node)){
+            const v=visit(node[key]);
+            if(v!=null)return v;
+          }
+          return null;
+        };
+        return visit(obj);
+      }
+
       const normalized={
-        wins:deepFind(raw,["br_wins_total","wins","victories"]),
-        kills:deepFind(raw,["br_kills_total","kills","eliminations"]),
-        deaths:deepFind(raw,["br_deaths_total","deaths"]),
-        matches:deepFind(raw,["br_matches_total","matches","matchesPlayed"]),
-        kd:deepFind(raw,["br_kd","kd","kdratio","killDeathRatio"]),
-        winRate:deepFind(raw,["br_win_rate","br_winrate","winRate","winrate"]),
-        top3:deepFind(raw,["br_top3","br_top3_total","top3"]),
-        top5:deepFind(raw,["br_top5","br_top5_total","top5"]),
-        top10:deepFind(raw,["br_top10","br_top10_total","top10"])
+        wins:findByPattern(raw,["brwinstotal","brwins","wins","victories","placetop1"]),
+        kills:findByPattern(raw,["brkillstotal","brkills","kills","eliminations"]),
+        deaths:findByPattern(raw,["brdeathstotal","brdeaths","deaths"]),
+        matches:findByPattern(raw,["brmatchestotal","brmatches","matchesplayed","matches"]),
+        kd:findByPattern(raw,["brkd","kdratio","killdeathratio","kd"]),
+        winRate:findByPattern(raw,["brwinrate","winrate","winratepercent"]),
+        top3:findByPattern(raw,["brtop3","placetop3"]),
+        top5:findByPattern(raw,["brtop5","placetop5"]),
+        top10:findByPattern(raw,["brtop10","placetop10"])
       };
 
       return res.status(200).json({
