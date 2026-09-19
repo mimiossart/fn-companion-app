@@ -747,6 +747,16 @@ function renderProfileStats(){
   var top3=pickFallback(['top3','br_placetop3','placetop3']);
   var top5=pickFallback(['top5','br_placetop5','placetop5']);
   var top10=pickFallback(['top10','br_placetop10','placetop10']);
+
+  // Fallbacks calculated from the actual totals returned by the API.
+  // This keeps K/D and win rate visible even when the API omits the ratio fields.
+  if(kd==null && kills!=null && deaths!=null && Number(deaths)>0){
+    kd=Number(kills)/Number(deaths);
+  }
+  if(winRate==null && wins!=null && matches!=null && Number(matches)>0){
+    winRate=(Number(wins)/Number(matches))*100;
+  }
+
   var rank=pick(s,['rank','displayRank','currentRank','division','tier']);
   var rankPoints=pick(s,['rankPoints','points','rating','rp']);
   var level=deepFind(progress,['level','currentLevel','accountLevel','seasonLevel','battlePassLevel']);
