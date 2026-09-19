@@ -181,8 +181,9 @@ export default async function handler(req,res){
       });
       const token=await readJson(tokenRes);
       if(!token.ok){
-        const msg=token.data&&(token.data.error||token.data.message);
-        return res.status(token.status).json({error:msg||"Impossible d'obtenir le token Fortnite OAuth."});
+        const msg=token.data&&(token.data.error||token.data.message||token.data.title||token.data.detail);
+        const detail=msg||token.raw||"Réponse OAuth vide.";
+        return res.status(token.status).json({error:"OAuth GetToken ("+token.status+") : "+String(detail).slice(0,500)});
       }
 
       const tokenRoot=token.data&&token.data.data!==undefined?token.data.data:token.data;
