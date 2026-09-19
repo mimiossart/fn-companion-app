@@ -1,58 +1,219 @@
-function safeJson(key,fallback){try{return JSON.parse(localStorage.getItem(key)||'null')??fallback}catch(e){return fallback}}
-function safeSet(key,value){try{localStorage.setItem(key,JSON.stringify(value))}catch(e){}}
-const state={page:'home',player:safeJson('fn_player_v2',null),cosmetics:[],map:null,shop:null,stats:null,history:safeJson('fn_stats_history',[]),lastSync:null};
-const routes={home:'Accueil',map:'Carte',quests:'Défis',items:'Skins & objets',shop:'Boutique',profile:'Profil',live:'Données live'};
-const icons={home:'⌂',map:'⌖',quests:'✓',items:'◈',shop:'🛒',profile:'◉',live:'↗'};
-function esc(s){return String(s==null?'':s).replace(/[&<>\"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[c]})}
-function nav(){var h='<aside class="sidebar"><div class="brand"><div class="brand-mark">FN</div><span>Companion</span></div><nav class="nav">';Object.keys(routes).forEach(function(k){h+='<button class="'+(state.page===k?'active':'')+'" onclick="go(\''+k+'\')"><span>'+icons[k]+'</span>'+routes[k]+'</button>'});h+='</nav><div class="notice" style="margin:28px 8px 0"><strong>Données réelles</strong><br>Skins, carte et boutique chargés depuis une API Fortnite. Les stats personnelles demandent une clé API côté serveur.</div></aside>';return h}
-function mobileNav(){var h='<div class="mobile-nav">';Object.keys(routes).slice(0,5).forEach(function(k){h+='<button class="'+(state.page===k?'active':'')+'" onclick="go(\''+k+'\')">'+icons[k]+'<br>'+routes[k]+'</button>'});return h+'</div>'}
-function layout(content){document.querySelector('#app').innerHTML='<div class="shell">'+nav()+'<main class="main"><div class="topbar"><div><div class="eyebrow">FN COMPANION</div><div class="page-title">'+routes[state.page]+'</div></div><div class="toolbar"><input id="globalSearch" class="search" placeholder="Rechercher…" oninput="filterUI(this.value)"><button class="btn" onclick="refreshPage()">↻ Actualiser</button></div></div>'+content+'</main>'+mobileNav()+'</div>'}
-function toast(m){var t=document.querySelector('#toast');if(!t){t=document.createElement('div');t.id='toast';t.style.cssText='position:fixed;right:18px;bottom:18px;z-index:50;background:#1b2131;border:1px solid #3b4562;color:#fff;padding:12px 15px;border-radius:12px;box-shadow:0 16px 40px #0006';document.body.appendChild(t)}t.textContent=m;clearTimeout(window.__toast);window.__toast=setTimeout(function(){t.remove()},2200)}
-async function api(type,params){var qs=new URLSearchParams(params||{});var url='/api/fortnite?type='+encodeURIComponent(type)+(qs.toString()?'&'+qs.toString():'');var r=await fetch(url);var d=await r.json();if(!r.ok)throw new Error(d.error||'API indisponible');state.lastSync=new Date().toISOString();return d.data||d}
-function cosmeticCard(c){var img=c.images&&(c.images.featured||c.images.icon||c.images.smallIcon);return '<article class="card item-card"><div class="cosmetic-img">'+(img?'<img loading="lazy" src="'+esc(img)+'" alt="'+esc(c.name||'Cosmétique')+'">':'✨')+'</div><div class="item-body"><div class="eyebrow" style="font-size:9px">'+esc((c.rarity&&(c.rarity.displayValue||c.rarity.value))||'Fortnite')+'</div><strong>'+esc(c.name||'Sans nom')+'</strong><div class="sub">'+esc((c.type&&(c.type.displayValue||c.type.value))||'Cosmétique')+'</div><button class="btn" onclick="addFav(\''+esc(c.id||'')+'\')">☆ Favori</button></div></article>'}
-function mini(c){var img=c.images&&(c.images.icon||c.images.smallIcon);return '<div class="row"><div class="item"><div class="mini-img">'+(img?'<img src="'+esc(img)+'" alt="">':'✨')+'</div><div><strong>'+esc(c.name||'Cosmétique')+'</strong><div class="sub">'+esc((c.type&&(c.type.displayValue||c.type.value))||'Objet')+'</div></div></div><span class="tag">'+esc((c.rarity&&(c.rarity.displayValue||c.rarity.value))||'Fortnite')+'</span></div>'}
-async function loadCosmetics(){if(state.cosmetics.length)return;try{var d=await api('cosmetics');state.cosmetics=(d||[]).filter(function(c){return c&&c.name}).slice(0,500)}catch(e){toast('Impossible de charger les skins')}}
-function home(){layout('<section class="hero"><div class="eyebrow">TABLEAU DE BORD</div><h1>FN Companion se met à jour.</h1><p>Carte actuelle, cosmétiques réels, boutique et profil amélioré. Les données sont séparées de l’interface pour faciliter les mises à jour.</p><button class="btn primary" onclick="go(\'map\')">Explorer la carte</button> <button class="btn" onclick="go(\'items\')">Voir les skins</button> <button class="btn" onclick="go(\'shop\')">Boutique</button></section><section class="grid g4"><div class="card metric"><div class="label">Skins chargés</div><div class="value">'+(state.cosmetics.length||'—')+'</div><div class="sub">Battle Royale</div></div><div class="card metric"><div class="label">POI</div><div class="value">'+(state.map&&state.map.pois?state.map.pois.length:'—')+'</div><div class="sub">Carte actuelle</div></div><div class="card metric"><div class="label">Favoris</div><div class="value">'+((state.player&&state.player.favorites)||[]).length+'</div><div class="sub">Sur cet appareil</div></div><div class="card metric"><div class="label">Synchro</div><div class="value" style="font-size:20px">'+(state.lastSync?new Date(state.lastSync).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}):'—')+'</div><div class="sub">API</div></div></section><div style="height:16px"></div><section class="grid g2"><div class="card"><div class="section-title">Cosmétiques récents</div><div id="homeCosmetics"><div class="sub">Chargement…</div></div></div><div class="card"><div class="section-title">Profil</div><div class="row"><div><strong>'+(state.player&&state.player.displayName?esc(state.player.displayName):'Mon profil')+'</strong><div class="sub">Pseudo, favoris, statistiques et préférences.</div></div><button class="btn primary" onclick="go(\'profile\')">Ouvrir</button></div></div></section>');loadCosmetics().then(function(){var b=document.querySelector('#homeCosmetics');if(b)b.innerHTML=state.cosmetics.slice(0,4).map(mini).join('')})}
-async function items(){layout('<div class="toolbar"><button class="tab active" onclick="renderItems(\'all\',this)">Tous</button><button class="tab" onclick="renderItems(\'outfit\',this)">Tenues</button><button class="tab" onclick="renderItems(\'backpack\',this)">Dos</button><button class="tab" onclick="renderItems(\'pickaxe\',this)">Pioche</button><button class="tab" onclick="renderItems(\'emote\',this)">Emotes</button></div><div id="itemsGrid" class="grid g3"><div class="card"><div class="sub">Chargement…</div></div></div>');await loadCosmetics();renderItems('all')}
-function renderItems(filter,b){if(b){document.querySelectorAll('.tabs .tab').forEach(function(x){x.classList.remove('active')});b.classList.add('active')}var box=document.querySelector('#itemsGrid');if(!box)return;var list=state.cosmetics.filter(function(c){var t=((c.type&&c.type.value)||'').toLowerCase();return filter==='all'||t.indexOf(filter)>=0}).slice(0,60);box.innerHTML=list.length?list.map(cosmeticCard).join(''):'<div class="card"><div class="sub">Aucun résultat.</div></div>'}
-function addFav(id){var c=state.cosmetics.find(function(x){return x.id===id});if(!c)return;state.player=state.player||{displayName:'Joueur',favorites:[]};state.player.favorites=state.player.favorites||[];var i=state.player.favorites.findIndex(function(x){return x.id===id});if(i>=0){state.player.favorites.splice(i,1);toast('Retiré des favoris')}else{state.player.favorites.unshift({id:id,name:c.name,image:(c.images&&(c.images.icon||c.images.smallIcon))||''});toast('Ajouté aux favoris')}localStorage.setItem('fn_player_v2',JSON.stringify(state.player))}
-async function mapPage(){layout('<div class="toolbar"><button class="tab active">Battle Royale</button><button class="tab">POI</button><button class="tab">Itinéraire</button><span id="mapStatus" class="sub">Chargement de la carte…</span></div><div id="realMap" class="map map-real"></div><div style="height:16px"></div><section class="grid g3"><div class="card metric"><div class="label">POI</div><div id="poiCount" class="value">—</div></div><div class="card metric"><div class="label">Source</div><div class="value" style="font-size:22px">Fortnite API</div></div><div class="card metric"><div class="label">Interaction</div><div class="value">Active</div></div></section>');try{var d=await api('map');state.map=d;var map=document.querySelector('#realMap');var img=d.images&&(d.images.blank||d.images.zoomed||d.images.pois||d.images.all);map.innerHTML=(img?'<img class="map-image" src="'+esc(img)+'" alt="Carte Fortnite actuelle">':'')+'<div class="zone"></div><div class="mapinfo">Carte actuelle · POI réels</div>';var world=135000;(d.pois||[]).slice(0,80).forEach(function(p){var x=Number(p.location&&p.location.x),y=Number(p.location&&p.location.y);if(!isFinite(x)||!isFinite(y))return;var left=(y+world)/(2*world)*100,top=(1-(x+world)/(2*world))*100;if(left<1||left>99||top<1||top>99)return;var b=document.createElement('button');b.className='poi';b.style.left=left+'%';b.style.top=top+'%';b.textContent=p.name||'POI';b.onclick=function(){toast((p.name||'POI')+' sélectionné')};map.appendChild(b)});document.querySelector('#poiCount').textContent=(d.pois||[]).length;document.querySelector('#mapStatus').textContent='Carte synchronisée'}catch(e){document.querySelector('#realMap').innerHTML='<div class="notice map-error">'+esc(e.message)+'</div>'}}
-function quests(){var qs=[['Top 10 dans une partie',8,10,1200],['Infliger 5 000 dégâts',3470,5000,800],['Jouer 5 parties avec un ami',3,5,650],['Visiter 3 points d’intérêt',3,3,500]];layout('<section class="grid g2"><div class="card"><div class="section-title">Suivi des objectifs</div><div class="list">'+qs.map(function(q){var pct=Math.min(100,q[1]/q[2]*100);return '<div class="row challenge"><div><strong>'+q[0]+'</strong><div class="sub">'+q[1].toLocaleString('fr-FR')+' / '+q[2].toLocaleString('fr-FR')+' · '+q[3]+' XP</div><div class="progress"><i style="width:'+pct+'%"></i></div></div><span class="tag">'+(q[1]>=q[2]?'Terminé':'En cours')+'</span></div>'}).join('')+'</div></div><div class="card"><div class="section-title">Suivi Fortnite</div><p class="sub">La progression native des quêtes n’est pas exposée ici sans accès authentifié autorisé.</p></div></section>')}
-async function shop(){
-  layout('<section class="hero compact-hero"><div class="eyebrow">BOUTIQUE DU JOUR</div><h2>La vraie boutique Fortnite</h2><p>Rotation actuelle avec noms, images, raretés et prix en V-Bucks. Cette page suit la boutique Fortnite disponible dans le jeu.</p></section><div class="toolbar"><button class="tab active" onclick="shopFilter(\'all\',this)">Tout</button><button class="tab" onclick="shopFilter(\'outfit\',this)">Tenues</button><button class="tab" onclick="shopFilter(\'emote\',this)">Emotes</button><button class="tab" onclick="shopFilter(\'pickaxe\',this)">Pioches</button><button class="tab" onclick="shopFilter(\'glider\',this)">Planeurs</button></div><div id="shopMeta" class="notice" style="margin-bottom:16px">Chargement de la boutique…</div><div id="shopGrid" class="grid g3"><div class="card"><div class="sub">Chargement…</div></div></div>');
-  try{
-    var d=await api('shop'); state.shop=d;
-    var raw=(d&&Array.isArray(d.entries))?d.entries:[];
-    state.shopEntries=raw.map(function(e){
-      var item=(e&&e.items&&e.items[0])||e&&e.item||e&&e.cosmetic||e||{};
-      var type=((item.type&&(item.type.value||item.type.displayValue))||e&&e.type||'item').toString().toLowerCase();
-      var img=(item.images&&(item.images.featured||item.images.icon||item.images.smallIcon))||e&&e.image||'';
-      var rarity=(item.rarity&&(item.rarity.displayValue||item.rarity.value))||e&&e.rarity||'';
-      var price=e&&e.finalPrice!=null?e.finalPrice:(e&&e.price!=null?e.price:(e&&e.prices&&e.prices.finalPrice!=null?e.prices.finalPrice:null));
-      return {name:item.name||e.name||'Objet',type:type,img:img,rarity:rarity,price:price};
-    }).filter(function(x){return x.name});
-    var meta=document.querySelector('#shopMeta');
-    if(meta)meta.textContent='Rotation actuelle · '+(d&&d.date?new Date(d.date).toLocaleString('fr-FR'):'mise à jour live')+' · '+state.shopEntries.length+' offres';
-    renderShop('all');
-  }catch(err){document.querySelector('#shopGrid').innerHTML='<div class="notice">'+esc(err.message||'Boutique indisponible')+'</div>';}
-}
-function renderShop(filter){
-  var box=document.querySelector('#shopGrid');if(!box)return;
-  box.innerHTML='';
-  var list=(state.shopEntries||[]).filter(function(x){return filter==='all'||x.type.indexOf(filter)>=0}).slice(0,80);
-  if(!list.length){box.innerHTML='<div class="card"><div class="sub">Aucune offre pour ce filtre.</div></div>';return}
-  list.forEach(function(x){
-    var card=document.createElement('article');card.className='card item-card';
-    card.innerHTML='<div class="cosmetic-img">'+(x.img?'<img loading="lazy" src="'+esc(x.img)+'" alt="'+esc(x.name)+'">':'🛒')+'</div><div class="item-body"><div class="eyebrow" style="font-size:9px">'+esc(x.rarity||'Fortnite')+'</div><strong>'+esc(x.name)+'</strong><div class="sub">'+(x.price!=null?esc(x.price)+' V-Bucks':'Prix non indiqué')+'</div></div>';
-    var btn=document.createElement('button');btn.className='btn';btn.textContent='Voir l’offre';btn.onclick=function(){toast('Offre sélectionnée : '+x.name)};card.querySelector('.item-body').appendChild(btn);box.appendChild(card);
+var FN={
+  page:"home",
+  player:"",
+  favorites:[],
+  cosmetics:[],
+  shop:[],
+  map:null
+};
+
+var ROUTES={
+  home:["Accueil","⌂"],
+  map:["Carte","⌖"],
+  quests:["Défis","✓"],
+  items:["Skins & objets","◈"],
+  shop:["Boutique","🛒"],
+  profile:["Profil","◉"],
+  live:["Live","↗"]
+};
+
+function esc(v){
+  var s=String(v===null||v===undefined?"":v);
+  return s.replace(/[&<>"']/g,function(c){
+    return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];
   });
 }
-function shopFilter(filter,b){document.querySelectorAll('.toolbar .tab').forEach(function(x){x.classList.remove('active')});if(b)b.classList.add('active');renderShop(filter)}
 
-function live(){layout('<div class="notice"><strong>Sources</strong><br>Cosmétiques, carte et boutique : proxy Vercel vers Fortnite-API.com. Les métriques agrégées d’îles peuvent aussi provenir de l’API de données Fortnite d’Epic.</div><div style="height:16px"></div><section class="grid g2"><div class="card"><div class="section-title">État</div><div class="list"><div class="row"><span>Cosmétiques</span><span class="tag">Live</span></div><div class="row"><span>Carte / POI</span><span class="tag">Live</span></div><div class="row"><span>Boutique</span><span class="tag">Live</span></div><div class="row"><span>Stats personnelles</span><span class="tag">Optionnelles</span></div></div></div><div class="card"><div class="section-title">Sécurité</div><p class="sub">Aucun mot de passe Epic n’est demandé. La clé API éventuelle est uniquement côté serveur.</p></div></section>')}
-function savePlayer(){var v=(document.querySelector('#playerInput').value||'').trim();state.player=state.player||{favorites:[]};state.player.displayName=v;safeSet('fn_player_v2',state.player);toast('Profil enregistré');loadStats()}
-function filterUI(v){var q=v.toLowerCase();document.querySelectorAll('.row,.item-card,.poi').forEach(function(el){el.style.display=el.innerText.toLowerCase().includes(q)?'':'none'})}
-async function refreshPage(){if(state.page==='items')await items();else if(state.page==='map')await mapPage();else if(state.page==='shop')await shop();else if(state.page==='home')home();else toast('Page actualisée')}
-function go(p){state.page=p;render();window.scrollTo(0,0)}
-function render(){({home:home,map:mapPage,quests:quests,items:items,shop:shop,profile:profile,live:live}[state.page]||home)()}
+function saveLocal(){
+  try{
+    localStorage.setItem("fn_player",FN.player||"");
+    localStorage.setItem("fn_favorites",JSON.stringify(FN.favorites||[]));
+  }catch(e){}
+}
+
+function loadLocal(){
+  try{
+    FN.player=localStorage.getItem("fn_player")||"";
+    var raw=localStorage.getItem("fn_favorites");
+    FN.favorites=raw?JSON.parse(raw):[];
+    if(!Array.isArray(FN.favorites))FN.favorites=[];
+  }catch(e){
+    FN.player="";FN.favorites=[];
+  }
+}
+
+function toast(msg){
+  var old=document.getElementById("fn-toast");
+  if(old)old.remove();
+  var t=document.createElement("div");
+  t.id="fn-toast";
+  t.textContent=msg;
+  t.style.cssText="position:fixed;right:18px;bottom:18px;z-index:9999;background:#1b2232;border:1px solid #46516e;color:white;padding:12px 16px;border-radius:12px;font-weight:700";
+  document.body.appendChild(t);
+  setTimeout(function(){if(t.parentNode)t.remove()},2200);
+}
+
+function nav(){
+  var html='<aside class="sidebar"><div class="brand"><div class="brand-mark">FN</div><span>Companion</span></div><nav class="nav">';
+  Object.keys(ROUTES).forEach(function(key){
+    html+='<button class="'+(FN.page===key?"active":"")+'" onclick="go(\''+key+'\')"><span>'+ROUTES[key][1]+'</span>'+ROUTES[key][0]+'</button>';
+  });
+  html+='</nav><div class="notice" style="margin-top:24px">Application compagnon Fortnite.<br>Les données externes sont chargées uniquement lorsque tu ouvres le module concerné.</div></aside>';
+  return html;
+}
+
+function mobileNav(){
+  var html='<div class="mobile-nav">';
+  Object.keys(ROUTES).slice(0,5).forEach(function(key){
+    html+='<button class="'+(FN.page===key?"active":"")+'" onclick="go(\''+key+'\')">'+ROUTES[key][1]+'<br>'+ROUTES[key][0]+'</button>';
+  });
+  return html+'</div>';
+}
+
+function layout(content){
+  var app=document.getElementById("app");
+  if(!app)return;
+  app.innerHTML='<div class="shell">'+nav()+
+    '<main class="main"><div class="topbar"><div><div class="eyebrow">FN COMPANION</div><div class="page-title">'+ROUTES[FN.page][0]+'</div></div>'+
+    '<div class="toolbar"><input class="search" id="fn-search" placeholder="Rechercher…" oninput="filterPage(this.value)"><button class="btn" onclick="render()">↻</button></div></div>'+
+    content+'</main>'+mobileNav()+'</div>';
+}
+
+function home(){
+  layout('<section class="hero"><div class="eyebrow">TABLEAU DE BORD</div><h1>Bienvenue sur FN Companion</h1><p>Carte, défis, skins, boutique et profil dans une seule application.</p><div class="toolbar"><button class="btn primary" onclick="go(\'map\')">Explorer la carte</button><button class="btn" onclick="go(\'shop\')">Boutique</button></div></section>'+
+  '<section class="grid g4"><div class="card metric"><div class="label">Skins chargés</div><div class="value">'+(FN.cosmetics.length||"—")+'</div><div class="sub">Données live</div></div>'+
+  '<div class="card metric"><div class="label">Favoris</div><div class="value">'+FN.favorites.length+'</div><div class="sub">Sur cet appareil</div></div>'+
+  '<div class="card metric"><div class="label">Profil</div><div class="value" style="font-size:20px">'+(FN.player?esc(FN.player):"—")+'</div><div class="sub">Pseudo enregistré</div></div>'+
+  '<div class="card metric"><div class="label">Statut</div><div class="value" style="font-size:20px">En ligne</div><div class="sub">Interface opérationnelle</div></div></section>'+
+  '<div style="height:16px"></div><section class="grid g2"><div class="card"><div class="section-title">Modules</div><div class="list">'+
+  '<div class="row"><span>Carte Fortnite</span><span class="tag">Disponible</span></div><div class="row"><span>Skins & objets</span><span class="tag">Disponible</span></div><div class="row"><span>Boutique</span><span class="tag">Disponible</span></div><div class="row"><span>Profil joueur</span><span class="tag">Disponible</span></div>'+
+  '</div></div><div class="card"><div class="section-title">Profil</div><div class="row"><div><strong>'+
+  (FN.player?esc(FN.player):"Configure ton pseudo")+
+  '</strong><div class="sub">Tes préférences restent sur cet appareil.</div></div><button class="btn primary" onclick="go(\'profile\')">Ouvrir</button></div></div></section>');
+}
+
+function quests(){
+  var qs=[["Top 10",8,10,1200],["Infliger des dégâts",3470,5000,800],["Jouer avec un ami",3,5,650],["Visiter des POI",3,3,500]];
+  layout('<section class="grid g2"><div class="card"><div class="section-title">Défis suivis</div><div class="list">'+qs.map(function(q){
+    var pct=Math.min(100,Math.round(q[1]/q[2]*100));
+    return '<div class="row"><div style="flex:1"><strong>'+q[0]+'</strong><div class="sub">'+q[1]+' / '+q[2]+' · '+q[3]+' XP</div><div class="progress"><i style="width:'+pct+'%"></i></div></div><span class="tag">'+(pct>=100?"Terminé":"En cours")+'</span></div>';
+  }).join("")+'</div></div><div class="card"><div class="section-title">Connexion aux données de jeu</div><p class="sub">La progression native des défis dépend d’un accès de données authentifié. L’application n’invente aucune progression.</p></div></section>');
+}
+
+async function loadCosmetics(){
+  try{
+    var r=await fetch("/api/fortnite?type=cosmetics");
+    var d=await r.json();
+    if(!r.ok)throw new Error(d.error||"API indisponible");
+    var data=d.data||d;
+    FN.cosmetics=Array.isArray(data)?data:[];
+  }catch(e){
+    toast("Skins indisponibles pour le moment");
+    FN.cosmetics=[];
+  }
+}
+
+function renderItems(filter){
+  var box=document.getElementById("fn-items");
+  if(!box)return;
+  var f=(filter||"").toLowerCase();
+  var list=FN.cosmetics.filter(function(c){
+    var t=((c.type&&((c.type.value||c.type.displayValue)))||"").toLowerCase();
+    return !f||t.indexOf(f)>=0||(c.name||"").toLowerCase().indexOf(f)>=0;
+  }).slice(0,48);
+  box.innerHTML=list.length?list.map(function(c){
+    var img=c.images&&(c.images.featured||c.images.icon||c.images.smallIcon);
+    var rarity=c.rarity&&(c.rarity.displayValue||c.rarity.value);
+    return '<article class="card item-card"><div class="cosmetic-img">'+(img?'<img src="'+esc(img)+'" alt="'+esc(c.name)+'" loading="lazy">':'✨')+'</div><div class="item-body"><div class="eyebrow" style="font-size:9px">'+esc(rarity||"Fortnite")+'</div><strong>'+esc(c.name||"Cosmétique")+'</strong><div class="sub">'+esc((c.type&&(c.type.displayValue||c.type.value))||"Objet")+'</div><button class="btn" onclick="favoriteSkin(\''+esc(c.id||"")+'\')">☆ Favori</button></div></article>';
+  }).join(""):'<div class="card"><div class="sub">Aucun objet trouvé.</div></div>';
+}
+
+async function items(){
+  layout('<div class="tabs"><button class="tab active" onclick="renderItems()">Tous</button><button class="tab" onclick="renderItems(\'outfit\')">Tenues</button><button class="tab" onclick="renderItems(\'emote\')">Emotes</button><button class="tab" onclick="renderItems(\'pickaxe\')">Pioches</button></div><div id="fn-items" class="grid g3"><div class="card"><div class="sub">Chargement…</div></div></div>');
+  await loadCosmetics();
+  renderItems();
+}
+
+function favoriteSkin(id){
+  var c=FN.cosmetics.find(function(x){return x.id===id});
+  if(!c)return;
+  var i=FN.favorites.findIndex(function(x){return x.id===id});
+  if(i>=0){FN.favorites.splice(i,1);toast("Retiré des favoris");}
+  else{FN.favorites.unshift({id:id,name:c.name,image:(c.images&&(c.images.icon||c.images.smallIcon))||""});toast("Ajouté aux favoris");}
+  saveLocal();
+}
+
+async function shop(){
+  layout('<section class="hero compact-hero"><div class="eyebrow">BOUTIQUE</div><h2>Boutique Fortnite actuelle</h2><p>Les offres sont récupérées au moment de l’ouverture.</p></section><div id="fn-shop" class="grid g3"><div class="card"><div class="sub">Chargement…</div></div></div>');
+  try{
+    var r=await fetch("/api/fortnite?type=shop");
+    var d=await r.json();
+    if(!r.ok)throw new Error(d.error||"Boutique indisponible");
+    var raw=Array.isArray(d.entries)?d.entries:[];
+    var entries=[];
+    raw.forEach(function(e){
+      var it=(e.items&&e.items[0])||e.item||e;
+      entries.push({name:it.name||e.name||"Objet",image:(it.images&&(it.images.featured||it.images.icon||it.images.smallIcon))||"",rarity:(it.rarity&&(it.rarity.displayValue||it.rarity.value))||"",price:e.finalPrice!=null?e.finalPrice:(e.price!=null?e.price:null)});
+    });
+    var box=document.getElementById("fn-shop");
+    box.innerHTML=entries.slice(0,40).map(function(x){
+      return '<article class="card item-card"><div class="cosmetic-img">'+(x.image?'<img src="'+esc(x.image)+'" alt="'+esc(x.name)+'" loading="lazy">':'🛒')+'</div><div class="item-body"><div class="eyebrow" style="font-size:9px">'+esc(x.rarity||"Fortnite")+'</div><strong>'+esc(x.name)+'</strong><div class="sub">'+(x.price!=null?esc(x.price)+" V-Bucks":"Prix non indiqué")+'</div></div></article>';
+    }).join("")||'<div class="card"><div class="sub">Aucune offre retournée.</div></div>';
+  }catch(e){
+    document.getElementById("fn-shop").innerHTML='<div class="notice">La boutique réelle n’est pas disponible pour le moment. Vérifie la clé API du fournisseur.</div>';
+  }
+}
+
+async function mapPage(){
+  layout('<div class="toolbar"><span class="tag">Carte Fortnite</span><span id="fn-map-status" class="sub">Chargement…</span></div><div id="fn-map" class="map"><div class="map-loading">Chargement de la carte…</div></div>');
+  try{
+    var r=await fetch("/api/fortnite?type=map");
+    var d=await r.json();
+    if(!r.ok)throw new Error(d.error||"Carte indisponible");
+    FN.map=d;
+    var box=document.getElementById("fn-map");
+    var img=d.images&&(d.images.blank||d.images.zoomed||d.images.pois||d.images.all);
+    box.innerHTML=(img?'<img class="map-image" src="'+esc(img)+'" alt="Carte Fortnite">':'')+'<div class="zone"></div><div class="mapinfo">Carte actuelle · POI live</div>';
+    (d.pois||[]).slice(0,50).forEach(function(p){
+      var x=Number(p.location&&p.location.x),y=Number(p.location&&p.location.y);
+      if(!isFinite(x)||!isFinite(y))return;
+      var b=document.createElement("button");
+      b.className="poi";b.textContent=p.name||"POI";b.style.left=((y+135000)/270000*100)+"%";b.style.top=((1-(x+135000)/270000)*100)+"%";
+      b.onclick=function(){toast((p.name||"POI")+" sélectionné")};
+      box.appendChild(b);
+    });
+    var st=document.getElementById("fn-map-status");if(st)st.textContent="Carte synchronisée · "+((d.pois||[]).length)+" POI";
+  }catch(e){
+    var b=document.getElementById("fn-map");if(b)b.innerHTML='<div class="notice map-error">'+esc(e.message)+'</div>';
+  }
+}
+
+function profile(){
+  layout('<section class="card profile"><div class="avatar">'+(FN.favorites[0]&&FN.favorites[0].image?'<img src="'+esc(FN.favorites[0].image)+'" alt="">':'🎮')+'</div><div><div class="eyebrow">PROFIL FORTNITE</div><h2>'+((FN.player&&esc(FN.player))||"Mon profil")+'</h2><div class="toolbar"><input id="fn-player" class="search" placeholder="Pseudo Epic" value="'+esc(FN.player)+'"><button class="btn primary" onclick="savePlayer()">Enregistrer</button><button class="btn" onclick="toast(\'Les stats peuvent être connectées avec une clé serveur.\')">Charger les stats</button></div></div></section><div style="height:16px"></div><section class="grid g4">'+["Victoires","K/D","Parties","Rang"].map(function(x){return '<div class="card metric"><div class="label">'+x+'</div><div class="value">—</div><div class="sub">Source stats à configurer</div></div>'}).join("")+'</section><div style="height:16px"></div><div class="card"><div class="section-title">Mes favoris</div><div class="grid g3">'+(FN.favorites.length?FN.favorites.slice(0,9).map(function(f){return '<div class="row item"><div class="mini-img">'+(f.image?'<img src="'+esc(f.image)+'" alt="">':'✨')+'</div><strong>'+esc(f.name)+'</strong></div>'}).join(""):'<div class="sub">Aucun favori. Ajoute des skins depuis la bibliothèque.</div>')+'</div></div>');
+}
+
+function live(){
+  layout('<div class="notice"><strong>Données externes</strong><br>Cette page vérifie les connexions lorsque les modules sont ouverts. Aucun secret n’est envoyé au navigateur.</div><div style="height:16px"></div><section class="grid g2"><div class="card"><div class="section-title">Services</div><div class="list"><div class="row"><span>Cosmétiques</span><span class="tag">API</span></div><div class="row"><span>Carte</span><span class="tag">API</span></div><div class="row"><span>Boutique</span><span class="tag">API</span></div><div class="row"><span>Stats personnelles</span><span class="tag">Optionnel</span></div></div></div><div class="card"><div class="section-title">Sécurité</div><p class="sub">Le navigateur ne reçoit aucune clé secrète. Les appels API passent par les fonctions serveur Vercel.</p></div></section>');
+}
+
+function savePlayer(){
+  var input=document.getElementById("fn-player");
+  FN.player=input?input.value.trim():"";
+  saveLocal();toast("Profil enregistré");profile();
+}
+
+function filterPage(v){
+  var q=String(v||"").toLowerCase();
+  document.querySelectorAll(".row,.item-card,.poi").forEach(function(el){
+    el.style.display=el.innerText.toLowerCase().indexOf(q)>=0?"":"none";
+  });
+}
+
+function go(p){FN.page=p;render();window.scrollTo(0,0)}
+function render(){
+  var fn={home:home,map:mapPage,quests:quests,items:items,shop:shop,profile:profile,live:live}[FN.page]||home;
+  try{fn()}catch(e){console.error(e);document.getElementById("app").innerHTML='<div style="padding:30px;color:white"><h1>FN Companion</h1><p>Une erreur a été détectée. Recharge la page.</p></div>'}
+}
+
+loadLocal();
 render();
