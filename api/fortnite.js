@@ -1,13 +1,46 @@
 const UPSTREAM = "https://fortnite-api.com";
-async function fetchWithTimeout(url,options,timeoutMs){
+async function fetchWithTimeout(url,options,timeoutMs,meta){
   const controller=new AbortController();
-  const timer=setTimeout(()=>controller.abort(),timeoutMs||8000);
+  const started=Date.now();
+  const limit=timeoutMs||8000;
+  const timer=setTimeout(()=>controller.abort(),limit);
+  const context=meta||{};
   try{
+    console.info("[FN_UPSTREAM_START]",JSON.stringify({
+      module:context.module||"unknown",
+      source:context.source||"unknown",
+      endpoint:url.replace(/([?&](x-api-key|key|token)=)[^&]+/gi,"$1[redacted]"),
+      timeoutMs:limit
+    }));
     const opts=Object.assign({},options||{},{signal:controller.signal});
-    return await fetch(url,opts);
+    const response=await fetch(url,opts);
+    console.info("[FN_UPSTREAM_END]",JSON.stringify({
+      module:context.module||"unknown",
+      source:context.source||"unknown",
+      status:response.status,
+      ok:response.ok,
+      durationMs:Date.now()-started,
+      contentType:response.headers.get("content-type")||""
+    }));
+    return response;
+  }catch(e){
+    console.error("[FN_UPSTREAM_ERROR]",JSON.stringify({
+      module:context.module||"unknown",
+      source:context.source||"unknown",
+      errorName:e.name||"Error",
+      message:e.message||String(e),
+      durationMs:Date.now()-started
+    }));
+    throw e;
   }finally{
     clearTimeout(timer);
   }
+}
+
+function fnLog(module,event,data){
+  const payload=Object.assign({module:module,event:event},data||{});
+  if(event==="error")console.error("[FN_MODULE]",JSON.stringify(payload));
+  else console.info("[FN_MODULE]",JSON.stringify(payload));
 }
 
 const DATA_API = "https://prod.api-fortnite.com";
@@ -30,7 +63,7 @@ export default async function handler(req,res){
 
     const headers={"x-api-key":key};
     try{
-      const accountRes=await fetchWithTimeout(DATA_API+"/api/v1/account/displayName/"+encodeURIComponent(name),{headers});
+      const accountRes=await fetchWithTimeout(DATA_API+"/api/v1/account/displayName/"+encodeURIComponent(name),{headers},5000,{module:"stats",source:"account"});
       const account=await readJson(accountRes);
       if(!account.ok){
         const apiMsg=account.data&&(account.data.error||account.data.message||account.data.detail);
@@ -48,7 +81,7 @@ export default async function handler(req,res){
       if(!accountId)return res.status(502).json({error:"Le service a trouvé le compte mais n'a pas renvoyé son ID Epic."});
 
       // Endpoint documenté : récupération complète des statistiques par account ID.
-      const statsRes=await fetchWithTimeout(DATA_API+"/api/v2/stats/"+encodeURIComponent(accountId),{headers});
+      const statsRes=await fetchWithTimeout(DATA_API+"/api/v2/stats/"+encodeURIComponent(accountId),{headers},7000,{module:"stats",source:"stats"});
       const stats=await readJson(statsRes);
       if(!stats.ok){
         const apiMsg=stats.data&&(stats.data.error||stats.data.message);
@@ -235,7 +268,7 @@ export default async function handler(req,res){
 
       if(key){
         try{
-          const r=await fetchWithTimeout(DATA_API+"/api/v1/map",{headers:{"x-api-key":key,"accept":"application/json"}},5000);
+          const r=await fetchWithTimeout(DATA_API+"/api/v1/map",{headers:{"x-api-key":key,"accept":"application/json"}},5000,{module:"map",source:"api-fortnite"});
           const text=await r.text();
           if(r.ok)try{mapJson=JSON.parse(text)}catch(_){}
         }catch(_){}
@@ -243,7 +276,7 @@ export default async function handler(req,res){
 
       if(!mapJson){
         try{
-          const r=await fetchWithTimeout("https://fortnite-api.com/v1/map",{headers:{"accept":"application/json"}},6000);
+          const r=await fetchWithTimeout("https://fortnite-api.com/v1/map",{headers:{"accept":"application/json"}},6000,{module:"map",source:"fortnite-api"});
           const text=await r.text();
           if(r.ok)try{mapJson=JSON.parse(text)}catch(_){}
         }catch(_){}
@@ -254,7 +287,7 @@ export default async function handler(req,res){
       const payload=mapJson&&mapJson.data!==undefined?mapJson.data:mapJson;
       if(key){
         try{
-          const r=await fetchWithTimeout(DATA_API+"/api/v1/map/image",{headers:{"x-api-key":key},redirect:"follow"},3500);
+          const r=await fetchWithTimeout(DATA_API+"/api/v1/map/image",{headers:{"x-api-key":key},redirect:"follow"},3500,{module:"map",source:"api-fortnite-image"});
           if(r.ok)imageUrl=r.url;
         }catch(_){}
       }
@@ -263,7 +296,7 @@ export default async function handler(req,res){
       }
 
       res.setHeader("Cache-Control","public, s-maxage=1800, stale-while-revalidate=21600, stale-if-error=21600");
-      return res.status(200).json({data:payload,image:imageUrl,source:key?"api-fortnite":"fortnite-api.com",fetchedAt:new Date().toISOString()});
+      fnLog("map","success",{source:key?"api-fortnite":"fortnite-api.com",hasImage:!!imageUrl,poiCount:Array.isArray(payload&&payload.pois)?payload.pois.length:null}); return res.status(200).json({data:payload,image:imageUrl,source:key?"api-fortnite":"fortnite-api.com",fetchedAt:new Date().toISOString()});
     }catch(e){
       return res.status(502).json({error:e.name==="AbortError"?"Délai dépassé pour la carte.":(e.message||"Carte indisponible.")});
     }
@@ -328,7 +361,7 @@ export default async function handler(req,res){
 
       if(!out.length)return res.status(502).json({error:"La source boutique n'a retourné aucune offre exploitable."});
       res.setHeader("Cache-Control","public, s-maxage=82800, stale-while-revalidate=86400, stale-if-error=86400");
-      return res.status(200).json({data:out,source:"normalized-shop",fetchedAt:new Date().toISOString()});
+      fnLog("shop","success",{source:"normalized-shop",offerCount:out.length}); return res.status(200).json({data:out,source:"normalized-shop",fetchedAt:new Date().toISOString()});
     }catch(e){
       return res.status(502).json({error:e.name==="AbortError"?"Délai dépassé pour la boutique.":(e.message||"Boutique indisponible.")});
     }
@@ -356,7 +389,7 @@ export default async function handler(req,res){
     }
     if(!items||!items.length)return res.status(502).json({error:"Le catalogue des skins est temporairement indisponible."});
     res.setHeader("Cache-Control","public, s-maxage=21600, stale-while-revalidate=86400, stale-if-error=86400");
-    return res.status(200).json(items);
+    fnLog("cosmetics","success",{itemCount:items.length}); return res.status(200).json(items);
   }catch(e){
     return res.status(502).json({error:e.name==="AbortError"?"Délai dépassé pour les skins.":(e.message||"API cosmetics indisponible")});
   }
