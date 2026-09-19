@@ -89,37 +89,44 @@ export default async function handler(req,res){
         return out;
       }
 
+      function firstStat(patterns){
+        const values=collectNumbers(raw,patterns);
+        return values.length?values[0]:null;
+      }
+
       function sumStats(patterns){
         const values=collectNumbers(raw,patterns);
         if(!values.length)return null;
         return values.reduce(function(total,v){return total+v},0);
       }
 
-      function directStat(patterns){
-        const values=collectNumbers(raw,patterns);
-        return values.length?values[0]:null;
-      }
-
       const normalized={
-        wins:sumStats(["br_placetop1","br_wins_total"]),
-        kills:sumStats(["br_kills"]),
-        deaths:sumStats(["br_deaths"]),
-        matches:sumStats(["br_matchesplayed"]),
-        minutes:sumStats(["br_minutesplayed"]),
-        top3:sumStats(["br_placetop3"]),
-        top5:sumStats(["br_placetop5"]),
-        top10:sumStats(["br_placetop10"]),
-        kd:directStat(["br_kd"]),
-        winRate:directStat(["br_winrate"])
+        wins:firstStat(['br_wins_total','br_placetop1']),
+        kills:firstStat(['br_kills_total']),
+        deaths:firstStat(['br_deaths_total']),
+        matches:firstStat(['br_matches_total']),
+        minutes:firstStat(['br_minutes_total','br_minutesplayed']),
+        top3:firstStat(['br_top3','br_placetop3']),
+        top5:firstStat(['br_top5','br_placetop5']),
+        top10:firstStat(['br_top10','br_placetop10']),
+        kd:firstStat(['br_kd','killdeathratio','kdratio']),
+        winRate:firstStat(['br_winrate','winrate'])
       };
 
-      if(normalized.kd==null && normalized.kills!=null && normalized.deaths){
-        normalized.kd=normalized.kills/normalized.deaths;
-      }
-      if(normalized.winRate==null && normalized.wins!=null && normalized.matches){
-        normalized.winRate=(normalized.wins/normalized.matches)*100;
-      }
+      if(normalized.wins==null)normalized.wins=sumStats(['br_placetop1']);
+      if(normalized.kills==null)normalized.kills=sumStats(['br_kills']);
+      if(normalized.deaths==null)normalized.deaths=sumStats(['br_deaths']);
+      if(normalized.matches==null)normalized.matches=sumStats(['br_matches','br_matchesplayed']);
+      if(normalized.top3==null)normalized.top3=sumStats(['br_placetop3']);
+      if(normalized.top5==null)normalized.top5=sumStats(['br_placetop5']);
+      if(normalized.top10==null)normalized.top10=sumStats(['br_placetop10']);
 
+      if(normalized.kd==null && normalized.kills!=null && normalized.deaths!=null && Number(normalized.deaths)>0){
+        normalized.kd=Number(normalized.kills)/Number(normalized.deaths);
+      }
+      if(normalized.winRate==null && normalized.wins!=null && normalized.matches!=null && Number(normalized.matches)>0){
+        normalized.winRate=(Number(normalized.wins)/Number(normalized.matches))*100;
+      }
       let seasonStats=null,progress=null,ranked=null;
       try{
         const seasonRes=await fetch(DATA_API+"/api/v1/profile/stats?displayName="+encodeURIComponent(name)+"&timeWindow=season",{headers});
