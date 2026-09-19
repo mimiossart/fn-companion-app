@@ -760,19 +760,40 @@ function renderProfileStats(){
   var rank=pick(s,['rank','displayRank','currentRank','division','tier']);
   var rankPoints=pick(s,['rankPoints','points','rating','rp']);
   var profileSources=[s.progressNormalized,progress,s.seasonStats,s.ranked,rawForLookup];
+  function findNumberLike(source,patterns){
+    var wanted=patterns.map(function(p){return String(p).toLowerCase().replace(/[^a-z0-9]/g,'')});
+    var found=null;
+    function walk(node){
+      if(found!=null||node==null||typeof node!=='object')return;
+      if(Array.isArray(node)){node.forEach(walk);return}
+      Object.keys(node).some(function(key){
+        var nk=String(key).toLowerCase().replace(/[^a-z0-9]/g,'');
+        var hit=wanted.some(function(p){return nk===p||nk.indexOf(p)>=0});
+        if(hit){
+          var v=node[key];
+          if(v&&typeof v==='object')v=v.value!=null?v.value:(v.current!=null?v.current:(v.total!=null?v.total:null));
+          if(v!=null&&v!==''&&!isNaN(Number(v))){found=Number(v);return true}
+        }
+        return false;
+      });
+      if(found==null)Object.keys(node).some(function(key){walk(node[key]);return found!=null});
+    }
+    walk(source);
+    return found;
+  }
   var level=s.progressNormalized&&s.progressNormalized.level!=null?s.progressNormalized.level:null;
   for(var ps=0;ps<profileSources.length&&level==null;ps++){
     var src=profileSources[ps];
     if(src!=null && (typeof src==='number' || (typeof src==='string' && src.trim()!=='' && !isNaN(Number(src))))){
       level=Number(src);
     }else{
-      level=deepFind(src,['level','currentLevel','accountLevel','seasonLevel','battlePassLevel','battlepasslevel','profileLevel','profilelevel']);
+      level=findNumberLike(src,['level','currentLevel','accountLevel','seasonLevel','battlePassLevel','profileLevel']);
       if(level==null)level=deepFind(src,['value','current','progress']);
     }
   }
   var xp=null;
   for(var xs=0;xs<profileSources.length&&xp==null;xs++){
-    xp=deepFind(profileSources[xs],['xp','experience','currentXp','seasonXp','experiencepoints','totalXp','totalExperience']);
+    xp=findNumberLike(profileSources[xs],['xp','experience','currentXp','seasonXp','experiencePoints','totalXp','totalExperience']);
   }
   var progressNotice='';
   if(level==null&&s.progressError){progressNotice=' · API Progress '+(s.progressError.status||'erreur');}
