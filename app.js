@@ -759,8 +759,8 @@ function renderProfileStats(){
 
   var rank=pick(s,['rank','displayRank','currentRank','division','tier']);
   var rankPoints=pick(s,['rankPoints','points','rating','rp']);
-  var profileSources=[progress,s.seasonStats,s.ranked,rawForLookup];
-  var level=null;
+  var profileSources=[s.progressNormalized,progress,s.seasonStats,s.ranked,rawForLookup];
+  var level=s.progressNormalized&&s.progressNormalized.level!=null?s.progressNormalized.level:null;
   for(var ps=0;ps<profileSources.length&&level==null;ps++){
     var src=profileSources[ps];
     if(src!=null && (typeof src==='number' || (typeof src==='string' && src.trim()!=='' && !isNaN(Number(src))))){
