@@ -401,7 +401,8 @@ function tournaments(){
 async function loadCosmetics(){
   try{
     var r=await fetch("/api/fortnite?type=cosmetics");
-    var d=await r.json();
+    var text=await r.text();
+    var d=null;try{d=JSON.parse(text)}catch(_){throw new Error((text||"Réponse serveur invalide").replace(/\s+/g," ").slice(0,300))}
     if(!r.ok)throw new Error(d.error||"API indisponible");
     var data=d.data||d;
     FN.cosmetics=Array.isArray(data)?data:[];
@@ -445,7 +446,8 @@ async function shop(){
   layout('<section class="hero compact-hero"><div class="eyebrow">BOUTIQUE</div><h2>Boutique Fortnite actuelle</h2><p>Les offres sont récupérées au moment de l’ouverture.</p></section><div id="fn-shop" class="grid g3"><div class="card"><div class="sub">Chargement…</div></div></div>');
   try{
     var r=await fetch("/api/fortnite?type=shop");
-    var d=await r.json();
+    var text=await r.text();
+    var d=null;try{d=JSON.parse(text)}catch(_){throw new Error((text||"Réponse serveur invalide").replace(/\s+/g," ").slice(0,300))}
     if(!r.ok)throw new Error(d.error||"Boutique indisponible");
     var payload=d&&d.data?d.data:d;
     var entries=[];
@@ -538,7 +540,8 @@ async function mapPage(){
   layout('<div class="toolbar"><span class="tag">Carte Fortnite</span><span id="fn-map-status" class="sub">Chargement…</span></div><div id="fn-map" class="map"><div class="map-loading">Chargement de la carte…</div></div>');
   try{
     var r=await fetch("/api/fortnite?type=map");
-    var d=await r.json();
+    var text=await r.text();
+    var d=null;try{d=JSON.parse(text)}catch(_){throw new Error((text||"Réponse serveur invalide").replace(/\s+/g," ").slice(0,300))}
     if(!r.ok)throw new Error(d.error||"Carte indisponible");
     FN.map=d;
 
