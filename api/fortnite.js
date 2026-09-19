@@ -88,12 +88,25 @@ export default async function handler(req,res){
 
       // Endpoint documenté : récupération complète des statistiques par account ID.
       let stats;
+      const statKeys=[
+        "br_wins_total",
+        "br_kills_total",
+        "br_deaths_total",
+        "br_matches_total",
+        "br_minutes_total",
+        "br_top3",
+        "br_top5",
+        "br_top10",
+        "br_kd",
+        "br_winrate"
+      ].join(",");
+      const statsUrl=DATA_API+"/api/v2/stats/"+encodeURIComponent(accountId)+"?stats="+encodeURIComponent(statKeys);
       try{
-        const statsRes=await fetchWithTimeout(DATA_API+"/api/v2/stats/"+encodeURIComponent(accountId),{headers},12000,{module:"stats",source:"stats"});
+        const statsRes=await fetchWithTimeout(statsUrl,{headers},8000,{module:"stats",source:"stats-filtered"});
         stats=await readJson(statsRes);
       }catch(firstError){
-        if(firstError&&firstError.name==="AbortError"){
-          const statsRetryRes=await fetchWithTimeout(DATA_API+"/api/v2/stats/"+encodeURIComponent(accountId),{headers},12000,{module:"stats",source:"stats-retry"});
+        if(firstError&&(/abort/i.test(String(firstError.name||""))||/abort/i.test(String(firstError.message||"")))){
+          const statsRetryRes=await fetchWithTimeout(statsUrl,{headers},8000,{module:"stats",source:"stats-filtered-retry"});
           stats=await readJson(statsRetryRes);
         }else{
           throw firstError;
@@ -213,7 +226,7 @@ export default async function handler(req,res){
         rankedError:null
       });
     }catch(e){
-      return res.status(502).json({error:e.name==="AbortError"?"Le service de statistiques met trop de temps à répondre.":(e.message||"API stats indisponible.")});
+      return res.status(502).json({error:(/abort/i.test(String(e.name||""))||/abort/i.test(String(e.message||"")))?"Le service de statistiques a dépassé le délai de réponse. Réessaie dans quelques secondes.":(e.message||"API stats indisponible.")});
     }
   }
 
