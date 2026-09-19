@@ -40,7 +40,8 @@ export default async function handler(req,res){
         return res.status(stats.status).json({error:apiMsg||"L'API n'a pas pu récupérer les statistiques de ce compte."});
       }
 
-      const raw=stats.data&&stats.data.data!==undefined?stats.data.data:stats.data;
+      const rawEnvelope=stats.data&&stats.data.data!==undefined?stats.data.data:stats.data;
+      const raw=rawEnvelope&&rawEnvelope.stats&&typeof rawEnvelope.stats==="object"?rawEnvelope.stats:rawEnvelope;
 
       function deepFind(obj,keys){
         if(obj==null)return null;
@@ -106,6 +107,7 @@ export default async function handler(req,res){
         account:accountData,
         accountId:accountId,
         stats:raw,
+        rawStatsEnvelope:rawEnvelope,
         normalized:normalized
       });
     }catch(e){
