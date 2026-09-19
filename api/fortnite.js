@@ -87,8 +87,18 @@ export default async function handler(req,res){
       if(!accountData)accountData={id:accountId,displayName:name};
 
       // Endpoint documenté : récupération complète des statistiques par account ID.
-      const statsRes=await fetchWithTimeout(DATA_API+"/api/v2/stats/"+encodeURIComponent(accountId),{headers},7000,{module:"stats",source:"stats"});
-      const stats=await readJson(statsRes);
+      let stats;
+      try{
+        const statsRes=await fetchWithTimeout(DATA_API+"/api/v2/stats/"+encodeURIComponent(accountId),{headers},12000,{module:"stats",source:"stats"});
+        stats=await readJson(statsRes);
+      }catch(firstError){
+        if(firstError&&firstError.name==="AbortError"){
+          const statsRetryRes=await fetchWithTimeout(DATA_API+"/api/v2/stats/"+encodeURIComponent(accountId),{headers},12000,{module:"stats",source:"stats-retry"});
+          stats=await readJson(statsRetryRes);
+        }else{
+          throw firstError;
+        }
+      }
       if(!stats.ok){
         const apiMsg=stats.data&&(stats.data.error||stats.data.message);
         return res.status(stats.status).json({error:apiMsg||"L'API n'a pas pu récupérer les statistiques de ce compte."});
@@ -187,6 +197,7 @@ export default async function handler(req,res){
       // Les statistiques principales sont retournées immédiatement.
       // Les données de profil (niveau/XP/ranked) restent optionnelles pour ne
       // jamais empêcher le chargement des victoires, K/D et parties.
+      res.setHeader("Cache-Control","private, no-store");
       return res.status(200).json({
         ok:true,
         account:accountData,
@@ -201,22 +212,8 @@ export default async function handler(req,res){
         ranked:null,
         rankedError:null
       });
-      return res.status(200).json({
-        ok:true,
-        account:accountData,
-        accountId:accountId,
-        stats:raw,
-        rawStatsEnvelope:rawEnvelope,
-        normalized:normalized,
-        seasonStats:seasonStats,
-        progress:progress,
-        progressNormalized:progressNormalized,
-        progressError:progressError,
-        ranked:ranked,
-        rankedError:rankedError
-      });
     }catch(e){
-      return res.status(502).json({error:e.message||"API stats indisponible."});
+      return res.status(502).json({error:e.name==="AbortError"?"Le service de statistiques met trop de temps à répondre.":(e.message||"API stats indisponible.")});
     }
   }
 
