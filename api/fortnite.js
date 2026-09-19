@@ -4,7 +4,7 @@ async function fetchWithTimeout(url,options,timeoutMs){
   const timer=setTimeout(()=>controller.abort(),timeoutMs||8000);
   try{
     const opts=Object.assign({},options||{},{signal:controller.signal});
-    return await fetchWithTimeout(url,opts);
+    return await fetch(url,opts);
   }finally{
     clearTimeout(timer);
   }
