@@ -638,13 +638,27 @@ async function loadPlayerStats(){
   var button=document.getElementById('load-stats');
   if(button){button.disabled=true;button.textContent='Chargement…'}
   try{
-    var r=await fetch('/api/fortnite?type=stats&name='+encodeURIComponent(name));
+    var cachedBefore=readStatsStore();
+    var cachedAccountId=cachedBefore&&cachedBefore.accountId?cachedBefore.accountId:"";
+    var endpoint='/api/fortnite?type=stats&name='+encodeURIComponent(name);
+    if(cachedAccountId)endpoint+='&accountId='+encodeURIComponent(cachedAccountId);
+    var r=await fetch(endpoint);
     var rawText=await r.text();
     var d=null;
-    try{d=JSON.parse(rawText)}catch(_){
-      throw new Error((rawText||'Réponse serveur invalide').replace(/\s+/g,' ').slice(0,300));
+    try{d=JSON.parse(rawText)}catch(_){d=null}
+    if(!r.ok){
+      if(cachedAccountId){
+        var retry=await fetch('/api/fortnite?type=stats&accountId='+encodeURIComponent(cachedAccountId)+'&retry=1');
+        var retryText=await retry.text();
+        var retryData=null;
+        try{retryData=JSON.parse(retryText)}catch(_){retryData=null}
+        if(retry.ok){r=retry;d=retryData}
+        else throw new Error((retryData&&retryData.error)||(d&&d.error)||('Erreur serveur '+r.status));
+      }else{
+        throw new Error((d&&d.error)||('Erreur serveur '+r.status));
+      }
     }
-    if(!r.ok)throw new Error(d.error||('Erreur serveur '+r.status));
+    if(!d)throw new Error('Réponse serveur invalide');
     FN.stats=d;
     stateStatsStore(d);
     renderProfileStats();
