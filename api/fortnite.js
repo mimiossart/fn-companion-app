@@ -64,45 +64,41 @@ export default async function handler(req,res){
       function normalizeStatKey(key){
         return String(key||"").toLowerCase().replace(/[^a-z0-9]/g,"");
       }
-      function findByPattern(obj,patterns){
+
+      function findExact(obj,keys){
         if(obj==null||typeof obj!=="object")return null;
-        const visit=function(node){
-          if(node==null)return null;
-          if(Array.isArray(node)){
-            for(let i=0;i<node.length;i++){const v=visit(node[i]);if(v!=null)return v;}
-            return null;
-          }
-          if(typeof node!=="object")return null;
+        const wanted=keys.map(normalizeStatKey);
+        let found=null;
+        (function walk(node){
+          if(found!=null||node==null||typeof node!=="object")return;
+          if(Array.isArray(node)){node.forEach(walk);return}
           for(const key of Object.keys(node)){
             const nk=normalizeStatKey(key);
-            if(patterns.some(p=>nk.indexOf(p)>=0)){
-              let value=node[key];
-              if(value&&typeof value==="object"){
-                if(value.value!=null)value=value.value;
-                else if(value.total!=null)value=value.total;
+            if(wanted.indexOf(nk)>=0){
+              let v=node[key];
+              if(v&&typeof v==="object"){
+                if(v.value!=null)v=v.value;
+                else if(v.total!=null)v=v.total;
               }
-              if(typeof value==="number" || (typeof value==="string"&&value.trim()!==""))return value;
+              if(v!=null&&v!==""){found=v;return}
             }
           }
-          for(const key of Object.keys(node)){
-            const v=visit(node[key]);
-            if(v!=null)return v;
-          }
-          return null;
-        };
-        return visit(obj);
+          for(const key of Object.keys(node))walk(node[key]);
+        })(obj);
+        return found;
       }
 
       const normalized={
-        wins:findByPattern(raw,["brwinstotal","brwins","wins","victories","placetop1"]),
-        kills:findByPattern(raw,["brkillstotal","brkills","kills","eliminations"]),
-        deaths:findByPattern(raw,["brdeathstotal","brdeaths","deaths"]),
-        matches:findByPattern(raw,["brmatchestotal","brmatches","matchesplayed","matches"]),
-        kd:findByPattern(raw,["brkd","kdratio","killdeathratio","kd"]),
-        winRate:findByPattern(raw,["brwinrate","winrate","winratepercent"]),
-        top3:findByPattern(raw,["brtop3","placetop3"]),
-        top5:findByPattern(raw,["brtop5","placetop5"]),
-        top10:findByPattern(raw,["brtop10","placetop10"])
+        wins:findExact(raw,["br_wins_total","wins","victories"]),
+        kills:findExact(raw,["br_kills_total","kills","eliminations"]),
+        deaths:findExact(raw,["br_deaths_total","deaths"]),
+        matches:findExact(raw,["br_matches_total","br_matches_played","matchesPlayed","matches"]),
+        kd:findExact(raw,["br_kd","br_kd_ratio","kd","kdratio","killDeathRatio"]),
+        winRate:findExact(raw,["br_winrate","br_win_rate","winRate","winrate"]),
+        top1:findExact(raw,["br_placetop1","placetop1","top1"]),
+        top3:findExact(raw,["br_placetop3","placetop3","top3"]),
+        top5:findExact(raw,["br_placetop5","placetop5","top5"]),
+        top10:findExact(raw,["br_placetop10","placetop10","top10"])
       };
 
       return res.status(200).json({
