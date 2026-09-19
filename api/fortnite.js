@@ -159,6 +159,37 @@ export default async function handler(req,res){
     }
   }
 
+  if(type==="quests"){
+    if(!name)return res.status(400).json({error:"Nom de joueur manquant."});
+    if(!key)return res.status(503).json({error:"FORTNITE_API_KEY n'est pas configurée dans Vercel."});
+    const fortniteToken=process.env.FORTNITE_TOKEN||"";
+    if(!fortniteToken){
+      return res.status(503).json({error:"Les quêtes personnelles nécessitent FORTNITE_TOKEN côté serveur. Cet endpoint n'est pas accessible avec la seule clé API."});
+    }
+    try{
+      const accountRes=await fetch(DATA_API+"/api/v1/account/displayName/"+encodeURIComponent(name),{headers:{"x-api-key":key}});
+      const account=await readJson(accountRes);
+      if(!account.ok){
+        const msg=account.data&&(account.data.error||account.data.message);
+        return res.status(account.status).json({error:msg||"Joueur introuvable."});
+      }
+      const root=account.data&&account.data.data!==undefined?account.data.data:account.data;
+      const accountData=root&&root.account?root.account:root;
+      const accountId=(accountData&&(accountData.id||accountData.accountId))||(root&&(root.id||root.accountId));
+      if(!accountId)return res.status(502).json({error:"ID Epic introuvable."});
+
+      const questRes=await fetch(DATA_API+"/api/v2/quests/"+encodeURIComponent(accountId),{
+        headers:{"x-api-key":key,"x-fortnite-token":fortniteToken}
+      });
+      const body=await questRes.text();
+      res.setHeader("Cache-Control","no-store");
+      res.status(questRes.status).setHeader("Content-Type",questRes.headers.get("content-type")||"application/json").send(body);
+      return;
+    }catch(e){
+      return res.status(502).json({error:e.message||"Quêtes indisponibles."});
+    }
+  }
+
   if(type==="shop"){
     if(!key)return res.status(503).json({error:"FORTNITE_API_KEY n'est pas configurée dans Vercel."});
     try{
