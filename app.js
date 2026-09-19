@@ -516,9 +516,44 @@ async function shop(){
       });
     }
 
+    function addCatalogEntries(storefronts){
+      if(!Array.isArray(storefronts))return;
+      storefronts.forEach(function(storefront){
+        var sectionName=storefront&&storefront.name?String(storefront.name):"Boutique";
+        var list=storefront&&Array.isArray(storefront.catalogEntries)?storefront.catalogEntries:[];
+        list.forEach(function(entry){
+          if(!entry||typeof entry!=="object")return;
+          var prices=Array.isArray(entry.prices)?entry.prices:[];
+          var priceObj=prices.find(function(p){return p&&p.currencyType==="MtxCurrency"})||prices[0];
+          var price=priceObj&&priceObj.finalPrice!=null?priceObj.finalPrice:null;
+          var name=entry.title||entry.displayName||entry.name||entry.devName||"Offre Fortnite";
+          var grants=Array.isArray(entry.itemGrants)?entry.itemGrants:[];
+          var grantNames=grants.map(function(g){return g&&g.templateId?String(g.templateId).split(":").pop():""}).filter(Boolean);
+          if(grantNames.length&&(!entry.title&&!entry.displayName&&!entry.name)){
+            name=grantNames.join(" + ");
+          }
+          var meta=entry.meta&&typeof entry.meta==="object"?entry.meta:{};
+          var section=meta.SectionId||sectionName;
+          entries.push({
+            name:name,
+            image:"",
+            rarity:"",
+            price:price,
+            section:section,
+            offerId:entry.offerId||entry.id||"",
+            itemCount:Math.max(1,grants.length)
+          });
+        });
+      });
+    }
+
     if(Array.isArray(payload)){
       addSection(payload,"Boutique");
     }else if(payload&&typeof payload==="object"){
+      addCatalogEntries(payload.storefronts);
+      if(payload.data&&typeof payload.data==="object"&&payload.data!==payload){
+        addCatalogEntries(payload.data.storefronts);
+      }
       addSection(payload.entries,payload.name||"Boutique");
       ["featured","daily","specialFeatured","specialDaily","votes","voteWinners","specialOffers","shop"].forEach(function(key){
         if(payload[key])addSection(payload[key],key);
