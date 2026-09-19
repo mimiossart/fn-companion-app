@@ -102,13 +102,39 @@ export default async function handler(req,res){
         top10:findExact(raw,["br_placetop10","placetop10","top10"])
       };
 
+      let seasonStats=null,progress=null,ranked=null;
+      try{
+        const seasonRes=await fetch(DATA_API+"/api/v1/profile/stats?displayName="+encodeURIComponent(name)+"&timeWindow=season",{headers});
+        if(seasonRes.ok){
+          const seasonJson=await seasonRes.json();
+          seasonStats=seasonJson.data!==undefined?seasonJson.data:seasonJson;
+        }
+      }catch(_){}
+      try{
+        const progressRes=await fetch(DATA_API+"/api/v1/profile/progress?displayName="+encodeURIComponent(name),{headers});
+        if(progressRes.ok){
+          const progressJson=await progressRes.json();
+          progress=progressJson.data!==undefined?progressJson.data:progressJson;
+        }
+      }catch(_){}
+      try{
+        const rankedRes=await fetch(DATA_API+"/api/v1/profile/ranked?displayName="+encodeURIComponent(name),{headers});
+        if(rankedRes.ok){
+          const rankedJson=await rankedRes.json();
+          ranked=rankedJson.data!==undefined?rankedJson.data:rankedJson;
+        }
+      }catch(_){}
+
       return res.status(200).json({
         ok:true,
         account:accountData,
         accountId:accountId,
         stats:raw,
         rawStatsEnvelope:rawEnvelope,
-        normalized:normalized
+        normalized:normalized,
+        seasonStats:seasonStats,
+        progress:progress,
+        ranked:ranked
       });
     }catch(e){
       return res.status(502).json({error:e.message||"API stats indisponible."});
