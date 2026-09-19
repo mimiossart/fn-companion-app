@@ -29,14 +29,34 @@ export default async function handler(req,res){
       const stats=await readJson(statsRes);
       if(!stats.ok)return res.status(stats.status).json({error:"Impossible de récupérer les statistiques."});
 
-      let ranked=null,progress=null;
-      const rankedRes=await fetch(DATA_API+"/api/v1/profile/ranked?displayName="+encodeURIComponent(name),{headers});
-      if(rankedRes.ok){ranked=await rankedRes.json()} 
-      const progressRes=await fetch(DATA_API+"/api/v1/profile/progress?displayName="+encodeURIComponent(name),{headers});
-      if(progressRes.ok){progress=await progressRes.json()}
-
       const statsData=stats.data!==undefined?stats.data:stats;
-      return res.status(200).json({account:accountData,stats:statsData,ranked:ranked,progress:progress});
+      let seasonStats=null,ranked=null,progress=null;
+
+      const seasonRes=await fetch(DATA_API+"/api/v1/profile/stats?displayName="+encodeURIComponent(name)+"&timeWindow=season",{headers});
+      if(seasonRes.ok){
+        const seasonJson=await seasonRes.json();
+        seasonStats=seasonJson.data!==undefined?seasonJson.data:seasonJson;
+      }
+
+      const rankedRes=await fetch(DATA_API+"/api/v1/profile/ranked?displayName="+encodeURIComponent(name),{headers});
+      if(rankedRes.ok){
+        const rankedJson=await rankedRes.json();
+        ranked=rankedJson.data!==undefined?rankedJson.data:rankedJson;
+      }
+
+      const progressRes=await fetch(DATA_API+"/api/v1/profile/progress?displayName="+encodeURIComponent(name),{headers});
+      if(progressRes.ok){
+        const progressJson=await progressRes.json();
+        progress=progressJson.data!==undefined?progressJson.data:progressJson;
+      }
+
+      return res.status(200).json({
+        account:accountData,
+        stats:statsData,
+        seasonStats:seasonStats,
+        ranked:ranked,
+        progress:progress
+      });
     }catch(e){
       return res.status(502).json({error:e.message||"API stats indisponible."});
     }
