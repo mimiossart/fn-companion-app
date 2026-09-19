@@ -188,18 +188,67 @@ async function mapPage(){
   }
 }
 
-function profile(){
-  layout('<section class="card profile"><div class="avatar">'+(FN.favorites[0]&&FN.favorites[0].image?'<img src="'+esc(FN.favorites[0].image)+'" alt="">':'🎮')+'</div><div><div class="eyebrow">PROFIL FORTNITE</div><h2>'+((FN.player&&esc(FN.player))||"Mon profil")+'</h2><div class="toolbar"><input id="fn-player" class="search" placeholder="Pseudo Epic" value="'+esc(FN.player)+'"><button class="btn primary" onclick="savePlayer()">Enregistrer</button><button class="btn" onclick="toast(\'Les stats peuvent être connectées avec une clé serveur.\')">Charger les stats</button></div></div></section><div style="height:16px"></div><section class="grid g4">'+["Victoires","K/D","Parties","Rang"].map(function(x){return '<div class="card metric"><div class="label">'+x+'</div><div class="value">—</div><div class="sub">Source stats à configurer</div></div>'}).join("")+'</section><div style="height:16px"></div><div class="card"><div class="section-title">Mes favoris</div><div class="grid g3">'+(FN.favorites.length?FN.favorites.slice(0,9).map(function(f){return '<div class="row item"><div class="mini-img">'+(f.image?'<img src="'+esc(f.image)+'" alt="">':'✨')+'</div><strong>'+esc(f.name)+'</strong></div>'}).join(""):'<div class="sub">Aucun favori. Ajoute des skins depuis la bibliothèque.</div>')+'</div></div>');
+function deepFind(obj,keys){
+  if(obj==null)return null;
+  for(var i=0;i<keys.length;i++){
+    if(typeof obj==='object'&&Object.prototype.hasOwnProperty.call(obj,keys[i])&&obj[keys[i]]!=null)return obj[keys[i]];
+  }
+  if(typeof obj!=='object')return null;
+  var vals=Array.isArray(obj)?obj:Object.keys(obj).map(function(k){return obj[k]});
+  for(var j=0;j<vals.length;j++){var r=deepFind(vals[j],keys);if(r!=null)return r}
+  return null;
 }
-
+async function loadPlayerStats(){
+  var name=(FN.player||'').trim();
+  if(!name){toast('Enregistre ton pseudo Epic');return}
+  var button=document.getElementById('load-stats');
+  if(button){button.disabled=true;button.textContent='Chargement…'}
+  try{
+    var r=await fetch('/api/fortnite?type=stats&name='+encodeURIComponent(name));
+    var d=await r.json();
+    if(!r.ok)throw new Error(d.error||'Stats indisponibles');
+    FN.stats=d;
+    stateStatsStore(d);
+    renderProfileStats();
+    toast('Statistiques chargées');
+  }catch(e){toast(e.message||'Stats indisponibles')}
+  finally{button=document.getElementById('load-stats');if(button){button.disabled=false;button.textContent='↻ Charger les stats'}}
+}
+function stateStatsStore(d){
+  try{localStorage.setItem('fn_stats',JSON.stringify(d))}catch(e){}
+}
+function readStatsStore(){
+  try{var x=localStorage.getItem('fn_stats');return x?JSON.parse(x):null}catch(e){return null}
+}
+function renderProfileStats(){
+  var box=document.getElementById('profile-stats');if(!box)return;
+  var s=FN.stats;if(!s){box.innerHTML='<div class="sub">Aucune statistique chargée.</div>';return}
+  var st=s.stats||s;
+  var wins=deepFind(st,['wins','br_wins','brWins','victories']);
+  var kills=deepFind(st,['kills','br_kills','brKills','eliminations']);
+  var deaths=deepFind(st,['deaths','br_deaths','brDeaths']);
+  var matches=deepFind(st,['matches','matchesPlayed','br_matches']);
+  var kd=deepFind(st,['kd','kdratio','killDeathRatio']);
+  var winRate=deepFind(st,['winRate','winrate','br_winrate']);
+  var rank=deepFind(s,['rank','displayRank','currentRank','division','tier']);
+  var rankPoints=deepFind(s,['rankPoints','points','rating','rp']);
+  var minutes=deepFind(st,['minutesPlayed','minutes_played']);
+  function val(v){return v==null||v===''?'—':(typeof v==='number'?v.toLocaleString('fr-FR'):esc(v))}
+  box.innerHTML='<section class="grid g4"><div class="card metric"><div class="label">Victoires</div><div class="value">'+val(wins)+'</div><div class="sub">Lifetime</div></div><div class="card metric"><div class="label">K/D</div><div class="value">'+val(kd)+'</div><div class="sub">Rapport éliminations / morts</div></div><div class="card metric"><div class="label">Parties</div><div class="value">'+val(matches)+'</div><div class="sub">Lifetime</div></div><div class="card metric"><div class="label">Rang</div><div class="value" style="font-size:20px">'+val(rank)+'</div><div class="sub">'+(rankPoints!=null?'Points : '+val(rankPoints):'Selon les données disponibles')+'</div></div></section><div style="height:16px"></div><section class="card"><div class="section-title">Détails Battle Royale</div><div class="list"><div class="row"><span>Éliminations</span><strong>'+val(kills)+'</strong></div><div class="row"><span>Morts</span><strong>'+val(deaths)+'</strong></div><div class="row"><span>Taux de victoire</span><strong>'+(winRate!=null?val(winRate)+' %':'—')+'</strong></div><div class="row"><span>Minutes jouées</span><strong>'+val(minutes)+'</strong></div></div></section>';
+}
+function profile(){
+  if(!FN.stats)FN.stats=readStatsStore();
+  layout('<section class="card profile"><div class="avatar">'+(FN.favorites[0]&&FN.favorites[0].image?'<img src="'+esc(FN.favorites[0].image)+'" alt="">':'🎮')+'</div><div><div class="eyebrow">PROFIL FORTNITE</div><h2>'+((FN.player&&esc(FN.player))||'Mon profil')+'</h2><p class="sub">Entre ton pseudo Epic puis utilise le bouton de synchronisation. La clé API reste sur Vercel et n’est jamais envoyée au navigateur.</p><div class="toolbar"><input id="fn-player" class="search" placeholder="Pseudo Epic" value="'+esc(FN.player)+'"><button class="btn primary" onclick="savePlayer()">Enregistrer</button><button id="load-stats" class="btn" onclick="loadPlayerStats()">↻ Charger les stats</button></div></div></section><div style="height:16px"></div><div id="profile-stats"></div><div style="height:16px"></div><div class="card"><div class="section-title">Mes favoris</div><div class="grid g3">'+(FN.favorites.length?FN.favorites.slice(0,9).map(function(f){return '<div class="row item"><div class="mini-img">'+(f.image?'<img src="'+esc(f.image)+'" alt="">':'✨')+'</div><strong>'+esc(f.name)+'</strong></div>'}).join(''):'<div class="sub">Aucun favori.</div>')+'</div></div>');
+  renderProfileStats();
+}
 function live(){
   layout('<div class="notice"><strong>Données externes</strong><br>Cette page vérifie les connexions lorsque les modules sont ouverts. Aucun secret n’est envoyé au navigateur.</div><div style="height:16px"></div><section class="grid g2"><div class="card"><div class="section-title">Services</div><div class="list"><div class="row"><span>Cosmétiques</span><span class="tag">API</span></div><div class="row"><span>Carte</span><span class="tag">API</span></div><div class="row"><span>Boutique</span><span class="tag">API</span></div><div class="row"><span>Stats personnelles</span><span class="tag">Optionnel</span></div></div></div><div class="card"><div class="section-title">Sécurité</div><p class="sub">Le navigateur ne reçoit aucune clé secrète. Les appels API passent par les fonctions serveur Vercel.</p></div></section>');
 }
 
 function savePlayer(){
-  var input=document.getElementById("fn-player");
-  FN.player=input?input.value.trim():"";
-  saveLocal();toast("Profil enregistré");profile();
+  var input=document.getElementById('fn-player');
+  FN.player=input?input.value.trim():'';
+  saveLocal();toast('Profil enregistré');loadPlayerStats();
 }
 
 function filterPage(v){
