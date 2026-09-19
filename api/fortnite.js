@@ -22,8 +22,12 @@ export default async function handler(req,res){
       const accountRes=await fetch(DATA_API+"/api/v1/account/displayName/"+encodeURIComponent(name),{headers});
       const account=await readJson(accountRes);
       if(!account.ok){
-        const apiMsg=account.data&&(account.data.error||account.data.message);
-        return res.status(account.status).json({error:apiMsg||("Impossible de trouver le joueur \""+name+"\".")});
+        const apiMsg=account.data&&(account.data.error||account.data.message||account.data.detail);
+        return res.status(account.status).json({
+          error:apiMsg||("Impossible de trouver le joueur \""+name+"\"."),
+          upstreamStatus:account.status,
+          upstreamResponse:account.raw?account.raw.slice(0,500):""
+        });
       }
 
       const accountRoot=account.data&&account.data.data!==undefined?account.data.data:account.data;
