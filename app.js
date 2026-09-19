@@ -306,7 +306,9 @@ async function mapPage(){
     var pois=payload&&Array.isArray(payload.pois)?payload.pois:[];
     if(!pois.length&&payload&&Array.isArray(payload.pointsOfInterest))pois=payload.pointsOfInterest;
 
-    box.innerHTML=(img?'<img class="map-image" src="'+esc(img)+'" alt="Carte Fortnite">':'<div class="notice">Image de la carte indisponible.</div>')+'<div class="zone"></div><div class="mapinfo">Carte actuelle · '+pois.length+' POI</div>';
+    box.innerHTML='<div class="map-controls"><button class="btn" id="map-zoom-out" title="Dézoomer">−</button><span id="map-zoom-label">100 %</span><button class="btn" id="map-zoom-in" title="Zoomer">+</button><button class="btn" id="map-zoom-reset" title="Réinitialiser">↺</button></div><div id="map-stage" class="map-stage"></div>';
+    var stage=document.getElementById("map-stage");
+    stage.innerHTML=(img?'<img class="map-image" src="'+esc(img)+'" alt="Carte Fortnite">':'<div class="notice">Image de la carte indisponible.</div>')+'<div class="zone"></div><div class="mapinfo">Carte actuelle · '+pois.length+' POI</div>';
 
     pois.slice(0,100).forEach(function(p){
       var x=Number(p.location&&p.location.x!=null?p.location.x:p.x);
@@ -325,8 +327,26 @@ async function mapPage(){
         b.style.top=((1-(x+135000)/270000)*100)+"%";
       }
       b.onclick=function(){toast((p.name||p.displayName||"POI")+" sélectionné")};
-      box.appendChild(b);
+      stage.appendChild(b);
     });
+
+    var zoom=1;
+    function applyZoom(){
+      stage.style.transform="scale("+zoom+")";
+      var label=document.getElementById("map-zoom-label");
+      if(label)label.textContent=Math.round(zoom*100)+" %";
+    }
+    document.getElementById("map-zoom-out").onclick=function(){
+      zoom=Math.max(.45,Math.round((zoom-.1)*100)/100);
+      applyZoom();
+    };
+    document.getElementById("map-zoom-in").onclick=function(){
+      zoom=Math.min(2,Math.round((zoom+.1)*100)/100);
+      applyZoom();
+    };
+    document.getElementById("map-zoom-reset").onclick=function(){
+      zoom=1;applyZoom();
+    };
 
     var st=document.getElementById("fn-map-status");
     if(st)st.textContent="Carte synchronisée · "+pois.length+" POI";
