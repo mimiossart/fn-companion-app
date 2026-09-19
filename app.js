@@ -92,12 +92,68 @@ function home(){
   '</strong><div class="sub">Tes préférences restent sur cet appareil.</div></div><button class="btn primary" onclick="go(\'profile\')">Ouvrir</button></div></div></section>');
 }
 
-function quests(){
-  var qs=[["Top 10",8,10,1200],["Infliger des dégâts",3470,5000,800],["Jouer avec un ami",3,5,650],["Visiter des POI",3,3,500]];
-  layout('<section class="grid g2"><div class="card"><div class="section-title">Défis suivis</div><div class="list">'+qs.map(function(q){
-    var pct=Math.min(100,Math.round(q[1]/q[2]*100));
-    return '<div class="row"><div style="flex:1"><strong>'+q[0]+'</strong><div class="sub">'+q[1]+' / '+q[2]+' · '+q[3]+' XP</div><div class="progress"><i style="width:'+pct+'%"></i></div></div><span class="tag">'+(pct>=100?"Terminé":"En cours")+'</span></div>';
-  }).join("")+'</div></div><div class="card"><div class="section-title">Connexion aux données de jeu</div><p class="sub">La progression native des défis dépend d’un accès de données authentifié. L’application n’invente aucune progression.</p></div></section>');
+async function quests(){
+  layout('<section class="hero compact-hero"><div class="eyebrow">DÉFIS</div><h2>Défis réels du compte</h2><p>La progression est chargée depuis ton profil Fortnite.</p></section><div id="fn-quests" class="grid g2"><div class="card"><div class="sub">Chargement…</div></div></div>');
+  var box=document.getElementById('fn-quests');
+  try{
+    if(!FN.player){
+      box.innerHTML='<div class="notice">Enregistre ton pseudo Epic dans Profil pour charger tes défis.</div>';
+      return;
+    }
+    var r=await fetch('/api/fortnite?type=quests&name='+encodeURIComponent(FN.player));
+    var d=null;try{d=await r.json()}catch(_){d={}};
+    if(!r.ok)throw new Error(d.error||('Erreur serveur '+r.status));
+
+    var payload=d&&d.data!==undefined?d.data:d;
+    var quests=[];
+    function valNum(v){
+      if(v==null||v==='')return null;
+      if(typeof v==='number')return v;
+      var n=Number(v);
+      return isFinite(n)?n:null;
+    }
+    function walk(node){
+      if(node==null)return;
+      if(Array.isArray(node)){node.forEach(walk);return}
+      if(typeof node!=='object')return;
+
+      var title=node.title||node.name||node.displayName||node.description;
+      var current=node.progress!=null?node.progress:(node.current!=null?node.current:(node.currentProgress!=null?node.currentProgress:null));
+      var target=node.total!=null?node.total:(node.target!=null?node.target:(node.goal!=null?node.goal:(node.totalProgress!=null?node.totalProgress:null)));
+      if(title&&(current!=null||target!=null)){
+        current=valNum(current);target=valNum(target);
+        if(current!=null||target!=null){
+          quests.push({
+            title:String(title),
+            current:current||0,
+            target:target||0,
+            xp:valNum(node.xp)||valNum(node.experience)||valNum(node.rewardXp),
+            completed:!!(node.completed||node.isComplete||node.complete)
+          });
+        }
+      }
+      Object.keys(node).forEach(function(k){walk(node[k]);});
+    }
+    walk(payload);
+
+    var seen={};
+    quests=quests.filter(function(q){
+      var key=q.title+'|'+q.current+'|'+q.target;
+      if(seen[key])return false;seen[key]=true;return true;
+    }).slice(0,100);
+
+    if(!quests.length){
+      box.innerHTML='<div class="notice">Le compte a répondu, mais aucun défi avec progression exploitable n’a été retourné.</div>';
+      return;
+    }
+
+    box.innerHTML=quests.map(function(q){
+      var pct=q.target>0?Math.min(100,Math.round(q.current/q.target*100)):(q.completed?100:0);
+      return '<div class="card"><div class="row"><div style="flex:1"><strong>'+esc(q.title)+'</strong><div class="sub">'+esc(q.current)+' / '+esc(q.target)+(q.xp!=null?' · '+esc(q.xp)+' XP':'')+'</div><div class="progress"><i style="width:'+pct+'%"></i></div></div><span class="tag">'+(q.completed||pct>=100?'Terminé':'En cours')+'</span></div></div>';
+    }).join('');
+  }catch(e){
+    box.innerHTML='<div class="notice">Impossible de charger les vrais défis : '+esc(e.message||'Erreur inconnue')+'</div>';
+  }
 }
 
 async function loadCosmetics(){
