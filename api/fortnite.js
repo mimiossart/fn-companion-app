@@ -16,46 +16,63 @@ export default async function handler(req,res){
   if(type==="stats"){
     if(!name)return res.status(400).json({error:"Nom de joueur manquant."});
     if(!key)return res.status(503).json({error:"FORTNITE_API_KEY n'est pas configurée dans Vercel."});
+
+    const headers={"x-api-key":key};
     try{
-      const headers={"x-api-key":key};
       const accountRes=await fetch(DATA_API+"/api/v1/account/displayName/"+encodeURIComponent(name),{headers});
       const account=await readJson(accountRes);
-      if(!account.ok)return res.status(account.status).json({error:account.data&&account.data.error||"Joueur introuvable."});
-      const accountData=account.data&&account.data.data?account.data.data:account.data;
-      const accountId=accountData&&(accountData.id||accountData.accountId);
-      if(!accountId)return res.status(502).json({error:"L'API n'a pas renvoyé d'ID Epic."});
+      if(!account.ok){
+        const apiMsg=account.data&&(account.data.error||account.data.message);
+        return res.status(account.status).json({error:apiMsg||("Impossible de trouver le joueur ""+name+"".")});
+      }
+
+      const accountRoot=account.data&&account.data.data!==undefined?account.data.data:account.data;
+      const accountData=accountRoot&&accountRoot.account?accountRoot.account:accountRoot;
+      const accountId=(accountData&&(accountData.id||accountData.accountId))
+        ||(accountRoot&&(accountRoot.id||accountRoot.accountId));
+      if(!accountId)return res.status(502).json({error:"Le service a trouvé le compte mais n'a pas renvoyé son ID Epic."});
 
       const statsRes=await fetch(DATA_API+"/api/v2/stats/"+encodeURIComponent(accountId),{headers});
       const stats=await readJson(statsRes);
-      if(!stats.ok)return res.status(stats.status).json({error:"Impossible de récupérer les statistiques."});
-
-      const statsData=stats.data!==undefined?stats.data:stats;
-      let seasonStats=null,ranked=null,progress=null;
-
-      const seasonRes=await fetch(DATA_API+"/api/v1/profile/stats?displayName="+encodeURIComponent(name)+"&timeWindow=season",{headers});
-      if(seasonRes.ok){
-        const seasonJson=await seasonRes.json();
-        seasonStats=seasonJson.data!==undefined?seasonJson.data:seasonJson;
+      if(!stats.ok){
+        const apiMsg=stats.data&&(stats.data.error||stats.data.message);
+        return res.status(stats.status).json({error:apiMsg||"L'API n'a pas pu récupérer les statistiques de ce compte."});
       }
 
-      const rankedRes=await fetch(DATA_API+"/api/v1/profile/ranked?displayName="+encodeURIComponent(name),{headers});
-      if(rankedRes.ok){
-        const rankedJson=await rankedRes.json();
-        ranked=rankedJson.data!==undefined?rankedJson.data:rankedJson;
+      const raw=stats.data&&stats.data.data!==undefined?stats.data.data:stats.data;
+
+      function deepFind(obj,keys){
+        if(obj==null)return null;
+        for(let i=0;i<keys.length;i++){
+          if(typeof obj==="object"&&Object.prototype.hasOwnProperty.call(obj,keys[i])&&obj[keys[i]]!=null)return obj[keys[i]];
+        }
+        if(typeof obj!=="object")return null;
+        const vals=Array.isArray(obj)?obj:Object.keys(obj).map(k=>obj[k]);
+        for(let i=0;i<vals.length;i++){
+          const found=deepFind(vals[i],keys);
+          if(found!=null)return found;
+        }
+        return null;
       }
 
-      const progressRes=await fetch(DATA_API+"/api/v1/profile/progress?displayName="+encodeURIComponent(name),{headers});
-      if(progressRes.ok){
-        const progressJson=await progressRes.json();
-        progress=progressJson.data!==undefined?progressJson.data:progressJson;
-      }
+      const normalized={
+        wins:deepFind(raw,["br_wins_total","wins","victories"]),
+        kills:deepFind(raw,["br_kills_total","kills","eliminations"]),
+        deaths:deepFind(raw,["br_deaths_total","deaths"]),
+        matches:deepFind(raw,["br_matches_total","matches","matchesPlayed"]),
+        kd:deepFind(raw,["br_kd","kd","kdratio","killDeathRatio"]),
+        winRate:deepFind(raw,["br_win_rate","br_winrate","winRate","winrate"]),
+        top3:deepFind(raw,["br_top3","br_top3_total","top3"]),
+        top5:deepFind(raw,["br_top5","br_top5_total","top5"]),
+        top10:deepFind(raw,["br_top10","br_top10_total","top10"])
+      };
 
       return res.status(200).json({
+        ok:true,
         account:accountData,
-        stats:statsData,
-        seasonStats:seasonStats,
-        ranked:ranked,
-        progress:progress
+        accountId:accountId,
+        stats:raw,
+        normalized:normalized
       });
     }catch(e){
       return res.status(502).json({error:e.message||"API stats indisponible."});
