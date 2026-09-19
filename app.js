@@ -332,7 +332,7 @@ async function mapPage(){
 
     var zoom=1;
     function applyZoom(){
-      stage.style.transform="scale("+zoom+")";
+      stage.style.transform="translate(-50%,-50%) scale("+zoom+")";
       var label=document.getElementById("map-zoom-label");
       if(label)label.textContent=Math.round(zoom*100)+" %";
     }
