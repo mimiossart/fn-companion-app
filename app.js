@@ -479,93 +479,51 @@ async function shop(){
     var payload=d&&d.data!==undefined?d.data:d;
     var entries=[];
 
-    function addSection(section,sectionName){
-      if(!section)return;
-      var list=Array.isArray(section)?section:(Array.isArray(section.entries)?section.entries:null);
-      if(!list)return;
-      list.forEach(function(entry){
-        if(!entry||typeof entry!=="object")return;
-        var items=Array.isArray(entry.items)?entry.items:[];
-        if(!items.length){
-          var directName=entry.name||entry.displayName||entry.title;
-          if(directName){
-            entries.push({
-              name:directName,
-              image:(entry.images&&(entry.images.featured||entry.images.icon||entry.images.smallIcon))||entry.image||"",
-              rarity:(entry.rarity&&(entry.rarity.displayValue||entry.rarity.value))||entry.rarity||"",
-              price:entry.finalPrice!=null?entry.finalPrice:(entry.price!=null?entry.price:null),
-              section:sectionName||"Boutique",
-              offerId:entry.offerId||entry.id||"",
-              itemCount:1
-            });
-          }
-          return;
+    function addEntry(entry,sectionName){
+      if(!entry||typeof entry!=="object")return;
+      var grants=Array.isArray(entry.itemGrants)?entry.itemGrants:[];
+      var items=Array.isArray(entry.items)?entry.items:[];
+      if(items.length){
+        items.forEach(function(it){addEntry(it,sectionName);});
+        return;
+      }
+      var prices=Array.isArray(entry.prices)?entry.prices:[];
+      var p=prices.find(function(x){return x&&x.finalPrice!=null})||prices[0]||null;
+      var price=entry.finalPrice!=null?entry.finalPrice:(entry.price!=null?entry.price:(entry.vbucks!=null?entry.vbucks:(p&&p.finalPrice!=null?p.finalPrice:null)));
+      var title=entry.displayName||entry.name||entry.title||entry.devName||entry.itemName||"";
+      if(!title&&grants.length){
+        title=grants.map(function(g){return g&&(g.displayName||g.name||(g.templateId?String(g.templateId).split(":").pop():""));}).filter(Boolean).join(" + ");
+      }
+      var image=(entry.images&&(entry.images.featured||entry.images.icon||entry.images.smallIcon||entry.images.url))||entry.image||"";
+      var rarity=(entry.rarity&&(entry.rarity.displayValue||entry.rarity.value))||entry.rarity||"";
+      var id=entry.offerId||entry.offerID||entry.id||entry.offer_id||"";
+      if(title&&(price!=null||grants.length||id||entry.prices)){
+        entries.push({name:title,image:image,rarity:rarity,price:price,section:sectionName||"Boutique",offerId:id,itemCount:Math.max(1,grants.length||1)});
+      }
+    }
+
+    function scanShop(node,sectionName,depth){
+      if(node==null||depth>10)return;
+      if(Array.isArray(node)){node.forEach(function(v){scanShop(v,sectionName,depth+1);});return;}
+      if(typeof node!=="object")return;
+      var localSection=sectionName;
+      if(node.name&&typeof node.name==="string"&&(node.entries||node.catalogEntries||node.items))localSection=node.name;
+      if(Array.isArray(node.entries))node.entries.forEach(function(v){addEntry(v,localSection);});
+      if(Array.isArray(node.catalogEntries))node.catalogEntries.forEach(function(v){addEntry(v,localSection);});
+      if(Array.isArray(node.items))node.items.forEach(function(v){addEntry(v,localSection);});
+      if(node.itemGrants||node.prices||node.offerId||node.offerID)addEntry(node,localSection);
+      Object.keys(node).forEach(function(key){
+        if(key==="images"||key==="image"||key==="rarity")return;
+        var child=node[key];
+        if(child&&typeof child==="object"){
+          var next=localSection;
+          if(["featured","daily","specialFeatured","specialDaily","votes","voteWinners","specialOffers","shop","storefronts"].indexOf(key)>=0)next=String(child&&child.name||key);
+          scanShop(child,next,depth+1);
         }
-        items.forEach(function(it){
-          if(!it||typeof it!=="object")return;
-          entries.push({
-            name:it.name||it.displayName||"Objet Fortnite",
-            image:(it.images&&(it.images.featured||it.images.icon||it.images.smallIcon))||it.image||"",
-            rarity:(it.rarity&&(it.rarity.displayValue||it.rarity.value))||it.rarity||"",
-            price:entry.finalPrice!=null?entry.finalPrice:(entry.price!=null?entry.price:null),
-            section:sectionName||"Boutique",
-            offerId:entry.offerId||entry.id||"",
-            itemCount:1
-          });
-        });
       });
     }
 
-    function addCatalogEntries(storefronts){
-      if(!Array.isArray(storefronts))return;
-      storefronts.forEach(function(storefront){
-        var sectionName=storefront&&storefront.name?String(storefront.name):"Boutique";
-        var list=storefront&&Array.isArray(storefront.catalogEntries)?storefront.catalogEntries:[];
-        list.forEach(function(entry){
-          if(!entry||typeof entry!=="object")return;
-          var prices=Array.isArray(entry.prices)?entry.prices:[];
-          var priceObj=prices.find(function(p){return p&&p.currencyType==="MtxCurrency"})||prices[0];
-          var price=priceObj&&priceObj.finalPrice!=null?priceObj.finalPrice:null;
-          var name=entry.title||entry.displayName||entry.name||entry.devName||"Offre Fortnite";
-          var grants=Array.isArray(entry.itemGrants)?entry.itemGrants:[];
-          var grantNames=grants.map(function(g){return g&&g.templateId?String(g.templateId).split(":").pop():""}).filter(Boolean);
-          if(grantNames.length&&(!entry.title&&!entry.displayName&&!entry.name)){
-            name=grantNames.join(" + ");
-          }
-          var meta=entry.meta&&typeof entry.meta==="object"?entry.meta:{};
-          var section=meta.SectionId||sectionName;
-          entries.push({
-            name:name,
-            image:"",
-            rarity:"",
-            price:price,
-            section:section,
-            offerId:entry.offerId||entry.id||"",
-            itemCount:Math.max(1,grants.length)
-          });
-        });
-      });
-    }
-
-    if(Array.isArray(payload)){
-      addSection(payload,"Boutique");
-    }else if(payload&&typeof payload==="object"){
-      addCatalogEntries(payload.storefronts);
-      if(payload.data&&typeof payload.data==="object"&&payload.data!==payload){
-        addCatalogEntries(payload.data.storefronts);
-      }
-      addSection(payload.entries,payload.name||"Boutique");
-      ["featured","daily","specialFeatured","specialDaily","votes","voteWinners","specialOffers","shop"].forEach(function(key){
-        if(payload[key])addSection(payload[key],key);
-      });
-      if(payload.data&&typeof payload.data==="object"&&payload.data!==payload){
-        var nested=payload.data;
-        addSection(nested.entries,nested.name||"Boutique");
-        ["featured","daily","specialFeatured","specialDaily","votes","voteWinners","specialOffers","shop"].forEach(function(key){
-          if(nested[key])addSection(nested[key],key);
-        });
-      }
-    }
+    scanShop(payload,"Boutique",0);
 
     var dedupe={};
     entries=entries.filter(function(x){
@@ -575,17 +533,15 @@ async function shop(){
       dedupe[k]=true;
       return true;
     });
-    entries.sort(function(a,b){
-      return String(a.section).localeCompare(String(b.section))||String(a.name).localeCompare(String(b.name));
-    });
+    entries.sort(function(a,b){return String(a.section).localeCompare(String(b.section))||String(a.name).localeCompare(String(b.name));});
 
     var box=document.getElementById("fn-shop");
     if(!entries.length){
-      box.innerHTML='<div class="notice">Aucune offre n’a été trouvée dans la réponse de la boutique.</div>';
+      box.innerHTML='<div class="notice">La source boutique a répondu, mais aucun objet exploitable n’a été trouvé.</div>';
       return;
     }
     box.innerHTML=entries.slice(0,100).map(function(x){
-      return '<article class="card item-card"><div class="cosmetic-img">'+(x.image?'<img src="'+esc(x.image)+'" alt="'+esc(x.name)+'" loading="lazy">':'🛒')+'</div><div class="item-body"><div class="eyebrow" style="font-size:9px">'+esc(x.section||"Boutique")+'</div><strong>'+esc(x.name)+'</strong><div class="sub">'+(x.price!=null?esc(x.price)+" V-Bucks":"Prix non indiqué")+'</div></div></article>';
+      return '<article class="card item-card"><div class="cosmetic-img">'+(x.image?'<img src="'+esc(x.image)+'" alt="'+esc(x.name)+'" loading="lazy">':'🛒')+'</div><div class="item-body"><div class="eyebrow" style="font-size:9px">'+esc(x.section||"Boutique")+'</div><strong>'+esc(x.name)+'</strong><div class="sub">'+(x.price!=null?esc(x.price)+" V-Bucks":"Prix non indiqué")+' · '+x.itemCount+" objet"+(x.itemCount>1?"s":"")+'</div></div></article>';
     }).join("");
   }catch(e){
     var msg=e&&e.message?e.message:"Erreur inconnue";
