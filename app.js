@@ -185,7 +185,7 @@ function authRegister(){
   if(!FN.supabase){if(msg)msg.textContent='Base de données indisponible.';return}
   FN.supabase.auth.signUp({email:email.value.trim(),password:pw.value}).then(function(res){
     if(res.error){if(msg)msg.textContent=res.error.message;return}
-    if(msg)msg.textContent=res.data.session?'Compte créé.':'Compte créé. Vérifie ton e-mail si une confirmation est demandée.';
+    if(msg)msg.textContent='Compte créé. Tu peux maintenant te connecter.';
   });
 }
 
@@ -196,9 +196,6 @@ function authLogin(){
   FN.supabase.auth.signInWithPassword({email:address,password:pw.value}).then(function(res){
     if(res.error){
       var text=res.error.message||'Erreur de connexion.';
-      if(/invalid login credentials/i.test(text)){
-        text='Connexion refusée. Si tu viens de créer le compte, vérifie d’abord l’e-mail de confirmation Supabase, puis réessaie.';
-      }
       if(msg)msg.textContent=text;
       return;
     }
@@ -328,7 +325,7 @@ function tournaments(){
     return;
   }
   if(!FN.user){
-    layout('<section class="hero compact-hero"><div class="eyebrow">TOURNOIS</div><h2>Tournois Lion Dynasty</h2><p>Inscris-toi pour participer aux tournois entre joueurs enregistrés sur le site.</p></section><section class="card auth-card"><div class="section-title">Créer ou rejoindre ton compte</div><div class="toolbar"><input id="tour-email" class="search" placeholder="E-mail"><input id="tour-password" class="search" type="password" placeholder="Mot de passe"><button class="btn primary" onclick="authLogin()">Se connecter</button><button class="btn" onclick="authRegister()">Créer un compte</button><button class="btn" onclick="authResendConfirmation()">Renvoyer l’e-mail</button></div><div id="tour-auth-msg" class="sub" style="margin-top:10px"></div></section><div style="height:16px"></div><div class="notice">Un compte est nécessaire pour apparaître comme joueur inscrit. Les tournois et résultats sont enregistrés en ligne.</div>');
+    layout('<section class="hero compact-hero"><div class="eyebrow">TOURNOIS</div><h2>Tournois Lion Dynasty</h2><p>Inscris-toi pour participer aux tournois entre joueurs enregistrés sur le site.</p></section><section class="card auth-card"><div class="section-title">Créer ou rejoindre ton compte</div><div class="toolbar"><input id="tour-email" class="search" placeholder="E-mail"><input id="tour-password" class="search" type="password" placeholder="Mot de passe"><button class="btn primary" onclick="authLogin()">Se connecter</button><button class="btn" onclick="authRegister()">Créer un compte</button></div><div id="tour-auth-msg" class="sub" style="margin-top:10px"></div></section><div style="height:16px"></div><div class="notice">Un compte est nécessaire pour apparaître comme joueur inscrit. Les tournois et résultats sont enregistrés en ligne.</div>');
     return;
   }
 
