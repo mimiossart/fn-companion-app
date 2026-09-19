@@ -271,32 +271,53 @@ export default async function handler(req,res){
   }
   if(type==="shop"){
     if(!key)return res.status(503).json({error:"FORTNITE_API_KEY n'est pas configurée dans Vercel."});
-    const cacheKey="shop-fr";
-    const cacheHeader=cacheControl(82800,86400);
-    const fresh=cached(cacheKey,false);
-    if(sendCached(res,fresh,cacheHeader))return;
     try{
-      const shopRes=await fetchWithTimeout(DATA_API+"/api/v1/shop?lang=fr",{headers:{"x-api-key":key}});
-      const body=await shopRes.text();
-      if(!shopRes.ok){
-        const stale=cached(cacheKey,true);
-        if(stale){sendCached(res,stale,cacheHeader);return}
-        res.status(shopRes.status).setHeader("Content-Type",shopRes.headers.get("content-type")||"application/json").send(body);
-        return;
+      let lastStatus=502;
+      let lastMessage="Boutique indisponible.";
+      let body="";
+      let contentType="application/json";
+
+      for(let attempt=0;attempt<2;attempt++){
+        try{
+          const shopRes=await fetchWithTimeout(
+            DATA_API+"/api/v1/shop?lang=fr",
+            {headers:{"x-api-key":key,"accept":"application/json"}},
+            5000
+          );
+          body=await shopRes.text();
+          lastStatus=shopRes.status;
+          contentType=shopRes.headers.get("content-type")||"application/json";
+
+          if(shopRes.ok){
+            res.setHeader("Cache-Control","public, s-maxage=82800, stale-while-revalidate=86400, stale-if-error=86400");
+            res.setHeader("X-FN-Upstream","ok");
+            res.setHeader("Content-Type",contentType);
+            return res.status(200).send(body);
+          }
+
+          let parsed=null;
+          try{parsed=JSON.parse(body)}catch(_){}
+          lastMessage=(parsed&&(parsed.error||parsed.message))
+            ||(body&&body.indexOf("<!DOCTYPE html")===0?"Le service Fortnite API a renvoyé une page d'erreur temporaire.":body.slice(0,300))
+            ||("Erreur API boutique "+lastStatus);
+
+          if(attempt===0 && (lastStatus===524||lastStatus>=500)){
+            await new Promise(function(resolve){setTimeout(resolve,700)});
+            continue;
+          }
+          break;
+        }catch(e){
+          lastStatus=e.name==="AbortError"?504:502;
+          lastMessage=e.name==="AbortError"?"Délai dépassé lors de l'accès à la boutique.":(e.message||"Boutique indisponible.");
+          if(attempt===0)await new Promise(function(resolve){setTimeout(resolve,500)});
+        }
       }
-      storeCache(cacheKey,body,82800000,172800000);
-      res.setHeader("Cache-Control",cacheHeader);
-      res.setHeader("X-FN-Cache","MISS");
-      res.status(200).setHeader("Content-Type",shopRes.headers.get("content-type")||"application/json").send(body);
-      return;
+
+      return res.status(lastStatus>=500?502:lastStatus).json({error:lastMessage,upstreamStatus:lastStatus});
     }catch(e){
-      const stale=cached(cacheKey,true);
-      if(stale)sendCached(res,stale,cacheHeader);
-      else return res.status(502).json({error:e.name==="AbortError"?"Fortnite API a dépassé le délai (timeout).":(e.message||"Boutique indisponible.")});
-      return;
+      return res.status(502).json({error:e.message||"Boutique indisponible."});
     }
   }
-
   const paths={
     cosmetics:"/api/v2/cosmetics/all?page=1&pageSize=60&lang=fr"
   };
