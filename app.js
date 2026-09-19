@@ -759,7 +759,11 @@ function renderProfileStats(){
 
   var rank=pick(s,['rank','displayRank','currentRank','division','tier']);
   var rankPoints=pick(s,['rankPoints','points','rating','rp']);
-  var level=deepFind(progress,['level','currentLevel','accountLevel','seasonLevel','battlePassLevel','battlepasslevel']);
+  var level=null;
+  if(progress!=null && (typeof progress==='number' || (typeof progress==='string' && progress.trim()!=='' && !isNaN(Number(progress))))){
+    level=Number(progress);
+  }
+  if(level==null)level=deepFind(progress,['level','currentLevel','accountLevel','seasonLevel','battlePassLevel','battlepasslevel']);
   if(level==null)level=deepFind(progress,['value','current','progress']);
   if(level==null)level=deepFind(rawForLookup,['level','currentLevel','accountLevel','seasonLevel','battlePassLevel','battlepasslevel']);
   var xp=deepFind(progress,['xp','experience','currentXp','seasonXp','experiencepoints']);
