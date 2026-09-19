@@ -151,42 +151,60 @@ async function shop(){
     if(!r.ok)throw new Error(d.error||"Boutique indisponible");
     var payload=d&&d.data?d.data:d;
     var entries=[];
-    function addSection(section,sectionName){
-      if(!section)return;
-      var list=Array.isArray(section)?section:(Array.isArray(section.entries)?section.entries:[]);
-      list.forEach(function(entry){
-        if(!entry||typeof entry!=="object")return;
-        var items=Array.isArray(entry.items)?entry.items:[];
-        if(!items.length)return;
-        var names=items.map(function(it){return it&&it.name?it.name:""}).filter(Boolean);
-        var first=items[0]||{};
-        var image=(first.images&&(first.images.featured||first.images.icon||first.images.smallIcon))||"";
-        entries.push({
-          name:names.join(" + ")||entry.offerName||"Offre Fortnite",
-          image:image,
-          rarity:(first.rarity&&(first.rarity.displayValue||first.rarity.value))||"",
-          price:entry.finalPrice!=null?entry.finalPrice:(entry.regularPrice!=null?entry.regularPrice:entry.price),
-          section:(section.name||sectionName||"Boutique"),
-          offerId:entry.offerId||"",
-          itemCount:items.length
+    function pushOffer(entry,sectionName){
+      if(!entry||typeof entry!=="object")return;
+      var items=Array.isArray(entry.items)?entry.items:[];
+      if(items.length){
+        items.forEach(function(it){
+          if(!it||typeof it!=="object")return;
+          entries.push({
+            name:it.name||it.displayName||entry.name||"Objet Fortnite",
+            image:(it.images&&(it.images.featured||it.images.icon||it.images.smallIcon))||it.image||"",
+            rarity:(it.rarity&&(it.rarity.displayValue||it.rarity.value))||it.rarity||"",
+            price:it.finalPrice!=null?it.finalPrice:(it.price!=null?it.price:(entry.finalPrice!=null?entry.finalPrice:(entry.price!=null?entry.price:null))),
+            section:sectionName||entry.section||entry.category||"Boutique",
+            offerId:entry.offerId||entry.id||"",
+            itemCount:1
+          });
         });
-      });
+        return;
+      }
+      var price=entry.finalPrice!=null?entry.finalPrice:(entry.price!=null?entry.price:(entry.vbucks!=null?entry.vbucks:null));
+      var image=(entry.images&&(entry.images.featured||entry.images.icon||entry.images.smallIcon))||entry.image||"";
+      var name=entry.name||entry.displayName||entry.title;
+      if(name&&(price!=null||image||entry.id||entry.offerId)){
+        entries.push({
+          name:name,image:image,
+          rarity:(entry.rarity&&(entry.rarity.displayValue||entry.rarity.value))||entry.rarity||"",
+          price:price,section:sectionName||entry.section||entry.category||"Boutique",
+          offerId:entry.offerId||entry.id||"",itemCount:1
+        });
+      }
     }
+    function parseShop(node,sectionName){
+      if(node==null)return;
+      if(Array.isArray(node)){node.forEach(function(v){parseShop(v,sectionName)});return;}
+      if(typeof node!=="object")return;
 
-    if(payload&&typeof payload==="object"){
-      ["featured","daily","specialFeatured","specialDaily","votes","voteWinners","specialOffers","br"].forEach(function(key){
-        var section=payload[key];
-        if(section){
-          addSection(section,(section&&section.name)||key);
-        }
+      if(Array.isArray(node.sections)){
+        node.sections.forEach(function(v){parseShop(v,v&&v.name||sectionName)});
+      }
+      if(node.sections&&typeof node.sections==="object"&&!Array.isArray(node.sections)){
+        Object.keys(node.sections).forEach(function(k){parseShop(node.sections[k],k)});
+      }
+
+      ["featured","daily","specialFeatured","specialDaily","votes","voteWinners","specialOffers"].forEach(function(k){
+        if(node[k])parseShop(node[k],(node[k]&&node[k].name)||k);
       });
-      if(Array.isArray(payload.entries))addSection(payload,"Boutique");
-      if(Array.isArray(payload.featured))addSection(payload.featured,"Featured");
+
+      if(Array.isArray(node.entries))node.entries.forEach(function(v){pushOffer(v,sectionName||node.name)});
+      if(Array.isArray(node.items))pushOffer(node,sectionName||node.name);
     }
+    parseShop(payload,"Boutique");
 
     var dedupe={};
     entries=entries.filter(function(x){
-      if(!x.name||x.name==="Offre Fortnite")return false;
+      if(!x.name)return false;
       var key=(x.offerId||x.name)+"|"+String(x.price);
       if(dedupe[key])return false;
       dedupe[key]=true;
