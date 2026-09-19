@@ -41,40 +41,31 @@ export default async function handler(req,res){
     }
   }
 
+  if(type==="shop"){
+    if(!key)return res.status(503).json({error:"FORTNITE_API_KEY n'est pas configurée dans Vercel."});
+    try{
+      const shopRes=await fetch(DATA_API+"/api/v1/shop?lang=fr",{headers:{"x-api-key":key}});
+      const body=await shopRes.text();
+      res.setHeader("Cache-Control","s-maxage=300, stale-while-revalidate=3600");
+      res.status(shopRes.status).setHeader("Content-Type",shopRes.headers.get("content-type")||"application/json").send(body);
+      return;
+    }catch(e){
+      return res.status(502).json({error:e.message||"Boutique indisponible."});
+    }
+  }
+
   const paths={
     cosmetics:"/v2/cosmetics/br?language=fr",
     map:"/v1/map",
-    shop:"/v2/shop/br?language=fr",
     news:"/v2/news"
   };
   if(!paths[type])return res.status(400).json({error:"Type inconnu."});
 
   try{
-    // Fortnite-API.com public endpoints do not use the player-stats API key.
-    // Do not forward FORTNITE_API_KEY to this upstream, because it belongs to api-fortnite.com.
-    var shopUrls=type==="shop"
-      ? [UPSTREAM+"/v2/shop?language=fr",UPSTREAM+"/v2/shop/br?language=fr"]
-      : [UPSTREAM+paths[type]];
-    var last=null;
-    for(var i=0;i<shopUrls.length;i++){
-      try{
-        var candidate=await fetch(shopUrls[i]);
-        var candidateText=await candidate.text();
-        last={response:candidate,text:candidateText};
-        if(candidate.ok){
-          res.setHeader("Cache-Control","s-maxage=120, stale-while-revalidate=600");
-          res.status(candidate.status).setHeader("Content-Type",candidate.headers.get("content-type")||"application/json").send(candidateText);
-          return;
-        }
-      }catch(e){
-        last={error:e};
-      }
-    }
-    if(last&&last.response){
-      res.status(last.response.status).setHeader("Content-Type",last.response.headers.get("content-type")||"application/json").send(last.text);
-      return;
-    }
-    throw (last&&last.error)||new Error("API indisponible");
+    const r=await fetch(UPSTREAM+paths[type]);
+    const text=await r.text();
+    res.setHeader("Cache-Control","s-maxage=120, stale-while-revalidate=600");
+    res.status(r.status).setHeader("Content-Type",r.headers.get("content-type")||"application/json").send(text);
   }catch(e){
     res.status(502).json({error:e.message||"API indisponible"});
   }
