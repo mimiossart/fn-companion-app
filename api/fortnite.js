@@ -286,18 +286,31 @@ export default async function handler(req,res){
 
   if(type==="map"){
     if(!key)return res.status(503).json({error:"FORTNITE_API_KEY n'est pas configurée dans Vercel."});
+    const cacheKey="map";
+    const cacheHeader=cacheControl(1800,21600);
+    const fresh=cached(cacheKey,false);
+    if(sendCached(res,fresh,cacheHeader))return;
     try{
       const headers={"x-api-key":key};
       const mapRes=await fetchWithTimeout(DATA_API+"/api/v1/map",{headers});
       const mapText=await mapRes.text();
       if(!mapRes.ok){
-        let msg=mapText;
-        try{const j=JSON.parse(mapText);msg=j.error||j.message||mapText}catch(_){}
-        return res.status(mapRes.status).json({error:String(msg).slice(0,500)});
+        const stale=cached(cacheKey,true);
+        if(stale)sendCached(res,stale,cacheHeader);
+        else{
+          let msg=mapText;
+          try{const j=JSON.parse(mapText);msg=j.error||j.message||mapText}catch(_){}
+          return res.status(mapRes.status).json({error:String(msg).slice(0,500)});
+        }
+        return;
       }
 
       let mapData;
-      try{mapData=JSON.parse(mapText)}catch(e){return res.status(502).json({error:"Réponse carte invalide."})}
+      try{mapData=JSON.parse(mapText)}catch(e){
+        const stale=cached(cacheKey,true);
+        if(stale){sendCached(res,stale,cacheHeader);return}
+        return res.status(502).json({error:"Réponse carte invalide."});
+      }
 
       let imageUrl=null;
       try{
@@ -306,27 +319,49 @@ export default async function handler(req,res){
       }catch(_){}
 
       const payload=mapData&&mapData.data!==undefined?mapData.data:mapData;
-      return res.status(200).json({
+      const result={
         data:payload,
         image:imageUrl,
         source:"api-fortnite.com",
         fetchedAt:new Date().toISOString()
-      });
+      };
+      storeCache(cacheKey,result,1800000,21600000);
+      res.setHeader("Cache-Control",cacheHeader);
+      res.setHeader("X-FN-Cache","MISS");
+      return res.status(200).json(result);
     }catch(e){
-      return res.status(502).json({error:e.message||"Carte indisponible."});
+      const stale=cached(cacheKey,true);
+      if(stale)sendCached(res,stale,cacheHeader);
+      else return res.status(502).json({error:e.name==="AbortError"?"Fortnite API a dépassé le délai (timeout).":(e.message||"Carte indisponible.")});
+      return;
     }
   }
 
   if(type==="shop"){
     if(!key)return res.status(503).json({error:"FORTNITE_API_KEY n'est pas configurée dans Vercel."});
+    const cacheKey="shop-fr";
+    const cacheHeader=cacheControl(82800,86400);
+    const fresh=cached(cacheKey,false);
+    if(sendCached(res,fresh,cacheHeader))return;
     try{
       const shopRes=await fetchWithTimeout(DATA_API+"/api/v1/shop?lang=fr",{headers:{"x-api-key":key}});
       const body=await shopRes.text();
-      res.setHeader("Cache-Control","s-maxage=300, stale-while-revalidate=3600");
-      res.status(shopRes.status).setHeader("Content-Type",shopRes.headers.get("content-type")||"application/json").send(body);
+      if(!shopRes.ok){
+        const stale=cached(cacheKey,true);
+        if(stale){sendCached(res,stale,cacheHeader);return}
+        res.status(shopRes.status).setHeader("Content-Type",shopRes.headers.get("content-type")||"application/json").send(body);
+        return;
+      }
+      storeCache(cacheKey,body,82800000,172800000);
+      res.setHeader("Cache-Control",cacheHeader);
+      res.setHeader("X-FN-Cache","MISS");
+      res.status(200).setHeader("Content-Type",shopRes.headers.get("content-type")||"application/json").send(body);
       return;
     }catch(e){
-      return res.status(502).json({error:e.message||"Boutique indisponible."});
+      const stale=cached(cacheKey,true);
+      if(stale)sendCached(res,stale,cacheHeader);
+      else return res.status(502).json({error:e.name==="AbortError"?"Fortnite API a dépassé le délai (timeout).":(e.message||"Boutique indisponible.")});
+      return;
     }
   }
 
@@ -336,19 +371,30 @@ export default async function handler(req,res){
   if(!paths[type])return res.status(400).json({error:"Type inconnu."});
 
   try{
+    if(!key)return res.status(503).json({error:"FORTNITE_API_KEY n'est pas configurée dans Vercel."});
+    const cacheKey="cosmetics-fr";
+    const cacheHeader=cacheControl(21600,86400);
+    const fresh=cached(cacheKey,false);
+    if(sendCached(res,fresh,cacheHeader))return;
     const r=await fetchWithTimeout(DATA_API+paths[type],{headers:{"x-api-key":key}});
     const text=await r.text();
     let payload=null;
     try{payload=JSON.parse(text)}catch(_){ }
     if(!r.ok){
+      const stale=cached(cacheKey,true);
+      if(stale){sendCached(res,stale,cacheHeader);return}
       const msg=payload&&(payload.error||payload.message);
       return res.status(r.status).json({error:msg||("Erreur API cosmetics : "+r.status)});
     }
     const data=payload&&payload.data!==undefined?payload.data:payload;
     const items=Array.isArray(data)?data:(data&&Array.isArray(data.items)?data.items:[]);
-    res.setHeader("Cache-Control","s-maxage=600, stale-while-revalidate=3600");
+    storeCache(cacheKey,items,21600000,86400000);
+    res.setHeader("Cache-Control",cacheHeader);
+    res.setHeader("X-FN-Cache","MISS");
     return res.status(200).json(items);
   }catch(e){
-    return res.status(502).json({error:e.message||"API cosmetics indisponible"});
+    const stale=cached("cosmetics-fr",true);
+    if(stale){sendCached(res,stale,cacheControl(21600,86400));return}
+    return res.status(502).json({error:e.name==="AbortError"?"Fortnite API a dépassé le délai (timeout).":(e.message||"API cosmetics indisponible")});
   }
 }
