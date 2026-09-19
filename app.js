@@ -297,13 +297,15 @@ function renderProfileStats(){
   var s=FN.stats;
   if(!s){box.innerHTML='<div class="sub">Aucune statistique chargée.</div>';return}
   var st=s.stats||s;
+  var season=s.seasonStats||null;
+  var metricSource=season||st;
   var progress=s.progress||null;
-  var wins=deepFind(st,['wins','br_wins','brWins','br_wins_total','wins_total','victories']);
-  var kills=deepFind(st,['kills','br_kills','brKills','br_kills_total','kills_total','eliminations']);
-  var deaths=deepFind(st,['deaths','br_deaths','brDeaths']);
-  var matches=deepFind(st,['matches','matchesPlayed','br_matches','br_matches_total','matches_total']);
-  var kd=deepFind(st,['kd','kdratio','killDeathRatio','br_kd','br_kd_ratio']);
-  var winRate=deepFind(st,['winRate','winrate','br_winrate','br_winrate_total','win_rate']);
+  var wins=deepFind(metricSource,['wins','br_wins','brWins','br_wins_total','wins_total','victories']);
+  var kills=deepFind(metricSource,['kills','br_kills','brKills','br_kills_total','kills_total','eliminations']);
+  var deaths=deepFind(metricSource,['deaths','br_deaths','brDeaths']);
+  var matches=deepFind(metricSource,['matches','matchesPlayed','br_matches','br_matches_total','matches_total']);
+  var kd=deepFind(metricSource,['kd','kdratio','killDeathRatio','br_kd','br_kd_ratio']);
+  var winRate=deepFind(metricSource,['winRate','winrate','br_winrate','br_winrate_total','win_rate']);
   var rank=deepFind(s,['rank','displayRank','currentRank','division','tier']);
   var rankPoints=deepFind(s,['rankPoints','points','rating','rp']);
   var level=deepFind(progress,['level','currentLevel','accountLevel','seasonLevel','battlePassLevel']);
