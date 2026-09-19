@@ -230,57 +230,45 @@ export default async function handler(req,res){
 
   if(type==="map"){
     if(!key)return res.status(503).json({error:"FORTNITE_API_KEY n'est pas configurée dans Vercel."});
-    const cacheKey="map";
-    const cacheHeader=cacheControl(1800,21600);
-    const fresh=cached(cacheKey,false);
-    if(sendCached(res,fresh,cacheHeader))return;
     try{
       const headers={"x-api-key":key};
-      const mapRes=await fetchWithTimeout(DATA_API+"/api/v1/map",{headers});
+      // Les deux ressources sont demandées en parallèle pour éviter de dépasser
+      // la durée maximale d'une Serverless Function Vercel.
+      const results=await Promise.all([
+        fetchWithTimeout(DATA_API+"/api/v1/map",{headers},4500),
+        fetchWithTimeout(DATA_API+"/api/v1/map/image",{headers,redirect:"follow"},4500)
+      ]);
+      const mapRes=results[0],imageRes=results[1];
       const mapText=await mapRes.text();
+
       if(!mapRes.ok){
-        const stale=cached(cacheKey,true);
-        if(stale)sendCached(res,stale,cacheHeader);
-        else{
-          let msg=mapText;
-          try{const j=JSON.parse(mapText);msg=j.error||j.message||mapText}catch(_){}
-          return res.status(mapRes.status).json({error:String(msg).slice(0,500)});
-        }
-        return;
+        let msg=mapText;
+        try{const j=JSON.parse(mapText);msg=j.error||j.message||mapText}catch(_){}
+        return res.status(mapRes.status).json({error:String(msg).slice(0,500)});
       }
 
-      let mapData;
-      try{mapData=JSON.parse(mapText)}catch(e){
-        const stale=cached(cacheKey,true);
-        if(stale){sendCached(res,stale,cacheHeader);return}
+      let mapData=null;
+      try{mapData=JSON.parse(mapText)}catch(_){
         return res.status(502).json({error:"Réponse carte invalide."});
       }
 
-      let imageUrl=null;
-      try{
-        const imageRes=await fetchWithTimeout(DATA_API+"/api/v1/map/image",{headers,redirect:"follow"});
-        if(imageRes.ok)imageUrl=imageRes.url;
-      }catch(_){}
-
       const payload=mapData&&mapData.data!==undefined?mapData.data:mapData;
-      const result={
+      const imageUrl=imageRes&&imageRes.ok?imageRes.url:null;
+      res.setHeader("Cache-Control","public, s-maxage=1800, stale-while-revalidate=21600, stale-if-error=21600");
+      return res.status(200).json({
         data:payload,
         image:imageUrl,
         source:"api-fortnite.com",
         fetchedAt:new Date().toISOString()
-      };
-      storeCache(cacheKey,result,1800000,21600000);
-      res.setHeader("Cache-Control",cacheHeader);
-      res.setHeader("X-FN-Cache","MISS");
-      return res.status(200).json(result);
+      });
     }catch(e){
-      const stale=cached(cacheKey,true);
-      if(stale)sendCached(res,stale,cacheHeader);
-      else return res.status(502).json({error:e.name==="AbortError"?"Fortnite API a dépassé le délai (timeout).":(e.message||"Carte indisponible.")});
-      return;
+      return res.status(502).json({
+        error:e.name==="AbortError"
+          ?"Fortnite API Carte : délai dépassé."
+          :(e.message||"Carte indisponible.")
+      });
     }
   }
-
   if(type==="shop"){
     if(!key)return res.status(503).json({error:"FORTNITE_API_KEY n'est pas configurée dans Vercel."});
     const cacheKey="shop-fr";
