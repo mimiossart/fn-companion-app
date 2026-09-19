@@ -759,15 +759,21 @@ function renderProfileStats(){
 
   var rank=pick(s,['rank','displayRank','currentRank','division','tier']);
   var rankPoints=pick(s,['rankPoints','points','rating','rp']);
+  var profileSources=[progress,s.seasonStats,s.ranked,rawForLookup];
   var level=null;
-  if(progress!=null && (typeof progress==='number' || (typeof progress==='string' && progress.trim()!=='' && !isNaN(Number(progress))))){
-    level=Number(progress);
+  for(var ps=0;ps<profileSources.length&&level==null;ps++){
+    var src=profileSources[ps];
+    if(src!=null && (typeof src==='number' || (typeof src==='string' && src.trim()!=='' && !isNaN(Number(src))))){
+      level=Number(src);
+    }else{
+      level=deepFind(src,['level','currentLevel','accountLevel','seasonLevel','battlePassLevel','battlepasslevel','profileLevel','profilelevel']);
+      if(level==null)level=deepFind(src,['value','current','progress']);
+    }
   }
-  if(level==null)level=deepFind(progress,['level','currentLevel','accountLevel','seasonLevel','battlePassLevel','battlepasslevel']);
-  if(level==null)level=deepFind(progress,['value','current','progress']);
-  if(level==null)level=deepFind(rawForLookup,['level','currentLevel','accountLevel','seasonLevel','battlePassLevel','battlepasslevel']);
-  var xp=deepFind(progress,['xp','experience','currentXp','seasonXp','experiencepoints']);
-  if(xp==null)xp=deepFind(rawForLookup,['xp','experience','currentXp','seasonXp','experiencepoints']);
+  var xp=null;
+  for(var xs=0;xs<profileSources.length&&xp==null;xs++){
+    xp=deepFind(profileSources[xs],['xp','experience','currentXp','seasonXp','experiencepoints','totalXp','totalExperience']);
+  }
   var progressNotice='';
   if(level==null&&s.progressError){progressNotice=' · API Progress '+(s.progressError.status||'erreur');}
 
