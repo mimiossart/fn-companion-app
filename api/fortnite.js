@@ -110,7 +110,7 @@ export default async function handler(req,res){
         // the lifetime total is absent, preventing the same value being counted twice.
         wins:statTotal(['br_wins_total'],['br_placetop1']),
         kills:statTotal(['br_kills_total'],['br_kills','kills','eliminations']),
-        deaths:statTotal(['br_deaths_total'],['br_deaths','deaths']),
+        deaths:statTotal(['br_deaths_total','deaths_total','deathstotal'],['br_deaths','deaths','eliminated']),
         matches:statTotal(['br_matches_total'],['br_matches','br_matchesplayed']),
         minutes:statTotal(['br_minutes_total'],['br_minutesplayed']),
         top3:statTotal(['br_top3'],['br_placetop3']),
@@ -122,6 +122,9 @@ export default async function handler(req,res){
 
       if(normalized.kd==null && normalized.kills!=null && normalized.deaths!=null && Number(normalized.deaths)>0){
         normalized.kd=Number(normalized.kills)/Number(normalized.deaths);
+      }
+      if(normalized.deaths==null && normalized.kills!=null && normalized.kd!=null && Number(normalized.kd)>0){
+        normalized.deaths=Math.max(0,Math.round(Number(normalized.kills)/Number(normalized.kd)));
       }
       if(normalized.kd==null && normalized.kills!=null && normalized.matches!=null && Number(normalized.matches)>Number(normalized.wins||0)){
         const estimatedDeaths=Number(normalized.matches)-Number(normalized.wins||0);
