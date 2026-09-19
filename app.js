@@ -746,12 +746,16 @@ function renderProfileStats(){
   var top1=pickFallback(['top1','br_placetop1','placetop1','wins','br_wins_total']);
   var top3=pickFallback(['top3','br_placetop3','placetop3']);
   var top5=pickFallback(['top5','br_placetop5','placetop5']);
-  var top10=pickFallback(['top10','br_placetop10','placetop10']);
+  var top10=pickFallback(['top10','br_placetop10','placetop10','top10_total']);
+  deaths=deaths==null?pickFallback(['deathstotal','deaths_total','br_deaths_total','brDeathsTotal']):deaths;
 
   // Fallbacks calculated from the actual totals returned by the API.
   // This keeps K/D and win rate visible even when the API omits the ratio fields.
   if(kd==null && kills!=null && deaths!=null && Number(deaths)>0){
     kd=Number(kills)/Number(deaths);
+  }
+  if(deaths==null && kills!=null && kd!=null && Number(kd)>0){
+    deaths=Math.max(0,Math.round(Number(kills)/Number(kd)));
   }
   if(winRate==null && wins!=null && matches!=null && Number(matches)>0){
     winRate=(Number(wins)/Number(matches))*100;
