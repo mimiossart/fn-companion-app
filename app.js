@@ -54,7 +54,7 @@ function toast(msg){
 }
 
 function nav(){
-  var html='<aside class="sidebar"><div class="brand"><div class="brand-mark">FN</div><span>Companion</span></div><nav class="nav">';
+  var html='<aside class="sidebar"><div class="brand"><div class="brand-mark">FN</div><span>Lion Dynasty</span></div><nav class="nav">';
   Object.keys(ROUTES).forEach(function(key){
     html+='<button class="'+(FN.page===key?"active":"")+'" onclick="go(\''+key+'\')"><span>'+ROUTES[key][1]+'</span>'+ROUTES[key][0]+'</button>';
   });
@@ -74,13 +74,13 @@ function layout(content){
   var app=document.getElementById("app");
   if(!app)return;
   app.innerHTML='<div class="shell">'+nav()+
-    '<main class="main"><div class="topbar"><div><div class="eyebrow">FN COMPANION</div><div class="page-title">'+ROUTES[FN.page][0]+'</div></div>'+
+    '<main class="main"><div class="topbar"><div><div class="eyebrow">FN COMPANION LION DYNASTY</div><div class="page-title">'+ROUTES[FN.page][0]+'</div></div>'+
     '<div class="toolbar"><input class="search" id="fn-search" placeholder="Rechercher…" oninput="filterPage(this.value)"><button class="btn" onclick="render()">↻</button></div></div>'+
     content+'</main>'+mobileNav()+'</div>';
 }
 
 function home(){
-  layout('<section class="hero"><div class="eyebrow">TABLEAU DE BORD</div><h1>Bienvenue sur FN Companion</h1><p>Carte, défis, skins, boutique et profil dans une seule application.</p><div class="toolbar"><button class="btn primary" onclick="go(\'map\')">Explorer la carte</button><button class="btn" onclick="go(\'shop\')">Boutique</button></div></section>'+
+  layout('<section class="hero"><div class="eyebrow">TABLEAU DE BORD</div><h1>Bienvenue sur FN Companion Lion Dynasty</h1><p>Carte, défis, skins, boutique et profil dans une seule application.</p><div class="toolbar"><button class="btn primary" onclick="go(\'map\')">Explorer la carte</button><button class="btn" onclick="go(\'shop\')">Boutique</button></div></section>'+
   '<section class="grid g4"><div class="card metric"><div class="label">Skins chargés</div><div class="value">'+(FN.cosmetics.length||"—")+'</div><div class="sub">Données live</div></div>'+
   '<div class="card metric"><div class="label">Favoris</div><div class="value">'+FN.favorites.length+'</div><div class="sub">Sur cet appareil</div></div>'+
   '<div class="card metric"><div class="label">Profil</div><div class="value" style="font-size:20px">'+(FN.player?esc(FN.player):"—")+'</div><div class="sub">Pseudo enregistré</div></div>'+
