@@ -35,7 +35,8 @@ export default async function handler(req,res){
       const progressRes=await fetch(DATA_API+"/api/v1/profile/progress?displayName="+encodeURIComponent(name),{headers});
       if(progressRes.ok){progress=await progressRes.json()}
 
-      return res.status(200).json({account:accountData,stats:stats.data,ranked:ranked,progress:progress});
+      const statsData=stats.data!==undefined?stats.data:stats;
+      return res.status(200).json({account:accountData,stats:statsData,ranked:ranked,progress:progress});
     }catch(e){
       return res.status(502).json({error:e.message||"API stats indisponible."});
     }
