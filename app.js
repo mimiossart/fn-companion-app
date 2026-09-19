@@ -310,33 +310,122 @@ function renderProfileStats(){
   var hasNormalized=normalized&&Object.keys(normalized).some(function(k){return normalized[k]!=null});
   var st=hasNormalized?normalized:rawStats;
   var progress=s.progress||null;
-  var wins=deepFind(st,['wins','br_wins','brWins','br_wins_total','br_placetop1','wins_total','victories']);
-  var kills=deepFind(st,['kills','br_kills','brKills','br_kills_total','kills_total','eliminations']);
-  var deaths=deepFind(st,['deaths','br_deaths','brDeaths','br_deaths_total']);
-  var matches=deepFind(st,['matches','matchesPlayed','br_matches','br_matches_total','br_matchesplayed','matches_total']);
-  var kd=deepFind(st,['kd','kdratio','killDeathRatio','br_kd','br_kd_ratio']);
-  var winRate=deepFind(st,['winRate','winrate','br_winrate','br_winrate_total','win_rate']);
-  var top3=deepFind(st,['top3','br_top3','br_top3_total','br_placetop3']);
-  var top5=deepFind(st,['top5','br_top5','br_top5_total','br_placetop5']);
-  var top10=deepFind(st,['top10','br_top10','br_top10_total','br_placetop10']);
-  var rank=deepFind(s,['rank','displayRank','currentRank','division','tier']);
-  var rankPoints=deepFind(s,['rankPoints','points','rating','rp']);
+
+  function pick(obj,keys){return deepFind(obj,keys)}
+  function val(v){return v==null||v===''?'—':(typeof v==='number'?v.toLocaleString('fr-FR'):esc(v))}
+  function modeStats(source,patterns){
+    if(!source)return null;
+    var out={
+      wins:findByStatPattern(source,patterns.wins),
+      kills:findByStatPattern(source,patterns.kills),
+      deaths:findByStatPattern(source,patterns.deaths),
+      matches:findByStatPattern(source,patterns.matches),
+      kd:findByStatPattern(source,patterns.kd),
+      winRate:findByStatPattern(source,patterns.winRate)
+    };
+    var any=Object.keys(out).some(function(k){return out[k]!=null});
+    return any?out:null;
+  }
+  function normalizeKey(k){return String(k||'').toLowerCase().replace(/[^a-z0-9]/g,'')}
+  function findByStatPattern(source,keys){
+    if(source==null)return null;
+    if(typeof source!=='object')return null;
+    var found=null;
+    (function walk(node){
+      if(found!=null||node==null||typeof node!=='object')return;
+      if(Array.isArray(node)){node.forEach(walk);return}
+      Object.keys(node).forEach(function(k){
+        if(found!=null)return;
+        var nk=normalizeKey(k);
+        for(var i=0;i<keys.length;i++){
+          if(nk===keys[i]||nk.indexOf(keys[i])>=0){
+            var v=node[k];
+            if(v&&typeof v==='object'){
+              v=v.value!=null?v.value:(v.total!=null?v.total:null);
+            }
+            if(v!=null&&v!==''){found=v;return}
+          }
+        }
+      });
+      if(found==null)Object.keys(node).forEach(function(k){walk(node[k]);});
+    })(source);
+    return found;
+  }
+
+  function findMode(source,aliases){
+    var result=null;
+    if(!source||typeof source!=='object')return null;
+    (function walk(node){
+      if(result||node==null||typeof node!=='object')return;
+      if(Array.isArray(node)){node.forEach(walk);return}
+      Object.keys(node).forEach(function(k){
+        if(result)return;
+        var nk=normalizeKey(k);
+        if(aliases.some(function(a){return nk===a||nk.indexOf(a)>=0})){
+          var candidate=node[k];
+          if(candidate&&typeof candidate==='object'){
+            var stats=modeStats(candidate,{
+              wins:['winstotal','wins','victory','placetop1'],
+              kills:['killstotal','kills','eliminations'],
+              deaths:['deathstotal','deaths'],
+              matches:['matchestotal','matchesplayed','matches'],
+              kd:['kd','kdratio','killdeathratio'],
+              winRate:['winrate','winratepercent']
+            });
+            if(stats)result=stats;
+          }
+        }
+      });
+      if(!result)Object.keys(node).forEach(function(k){walk(node[k]);});
+    })(source);
+    return result;
+  }
+
+  var modes=[
+    {label:'Solo',aliases:['solo']},
+    {label:'Duo',aliases:['duo','duos']},
+    {label:'Escouades',aliases:['squad','squads']},
+    {label:'Zéro construction',aliases:['zerobuild','zerobuilds','nobuild']}
+  ];
+  var modeCards=modes.map(function(m){
+    var ms=findMode(rawStats,m.aliases)||findMode(s,m.aliases);
+    if(!ms)return '';
+    return '<div class="card"><div class="section-title">'+m.label+'</div><div class="list"><div class="row"><span>Victoires</span><strong>'+val(ms.wins)+'</strong></div><div class="row"><span>Éliminations</span><strong>'+val(ms.kills)+'</strong></div><div class="row"><span>K/D</span><strong>'+val(ms.kd)+'</strong></div><div class="row"><span>Parties</span><strong>'+val(ms.matches)+'</strong></div><div class="row"><span>Taux de victoire</span><strong>'+val(ms.winRate)+(ms.winRate!=null?' %':'')+'</strong></div></div></div>';
+  }).join('');
+
+  var wins=pick(st,['wins','br_wins','brWins','br_wins_total','br_placetop1','wins_total','victories']);
+  var kills=pick(st,['kills','br_kills','brKills','br_kills_total','kills_total','eliminations']);
+  var deaths=pick(st,['deaths','br_deaths','brDeaths','br_deaths_total']);
+  var matches=pick(st,['matches','matchesPlayed','br_matches','br_matches_total','br_matchesplayed','matches_total']);
+  var kd=pick(st,['kd','kdratio','killDeathRatio','br_kd','br_kd_ratio']);
+  var winRate=pick(st,['winRate','winrate','br_winrate','br_winrate_total','win_rate']);
+  var top3=pick(st,['top3','br_top3','br_top3_total','br_placetop3']);
+  var top5=pick(st,['top5','br_top5','br_top5_total','br_placetop5']);
+  var top10=pick(st,['top10','br_top10','br_top10_total','br_placetop10']);
+  var rank=pick(s,['rank','displayRank','currentRank','division','tier']);
+  var rankPoints=pick(s,['rankPoints','points','rating','rp']);
   var level=deepFind(progress,['level','currentLevel','accountLevel','seasonLevel','battlePassLevel']);
   if(level==null)level=deepFind(s,['level','currentLevel','accountLevel','seasonLevel','battlePassLevel']);
   var xp=deepFind(progress,['xp','experience','currentXp','seasonXp']);
   if(xp==null)xp=deepFind(s,['xp','experience','currentXp','seasonXp']);
-  function val(v){return v==null||v===''?'—':(typeof v==='number'?v.toLocaleString('fr-FR'):esc(v))}
-  var missing=(wins==null&&kills==null&&matches==null);
+
+  var missing=(wins==null&&kills==null&&matches==null&&modeCards==='');
   if(missing){
-    var accountLabel=s.account&&s.account.displayName?s.account.displayName:(FN.player||"ce compte");
+    var accountLabel=s.account&&s.account.displayName?s.account.displayName:(FN.player||'ce compte');
     var rawKeys=[];
-    try{
-      Object.keys(rawStats||{}).forEach(function(k){rawKeys.push(k)});
-    }catch(_){}
-    box.innerHTML='<div class="notice"><strong>Compte trouvé : '+esc(accountLabel)+'</strong><br>La réponse Fortnite ne contient pas les statistiques publiques demandées.<br><span class="sub">ID Epic : '+esc(s.accountId||"—")+' · Champs reçus : '+esc(rawKeys.slice(0,18).join(", ")||"aucun")+'</span></div>';
+    try{Object.keys(rawStats||{}).forEach(function(k){rawKeys.push(k)})}catch(_){}
+    box.innerHTML='<div class="notice"><strong>Compte trouvé : '+esc(accountLabel)+'</strong><br>La réponse Fortnite ne contient pas encore de statistiques publiques exploitables.<br><span class="sub">ID Epic : '+esc(s.accountId||'—')+' · Champs reçus : '+esc(rawKeys.slice(0,18).join(', ')||'aucun')+'</span></div>';
     return;
   }
-  box.innerHTML='<section class="grid g4"><div class="card metric"><div class="label">Victoires</div><div class="value">'+val(wins)+'</div><div class="sub">Lifetime</div></div><div class="card metric"><div class="label">K/D</div><div class="value">'+val(kd)+'</div><div class="sub">Éliminations / morts</div></div><div class="card metric"><div class="label">Niveau</div><div class="value">'+val(level)+'</div><div class="sub">'+(xp!=null?'XP : '+val(xp):'Profil')+'</div></div><div class="card metric"><div class="label">Parties</div><div class="value">'+val(matches)+'</div><div class="sub">Lifetime</div></div></section><div style="height:16px"></div><section class="card"><div class="section-title">Classement</div><div class="list"><div class="row"><span>Rang</span><strong>'+val(rank)+'</strong></div><div class="row"><span>Points</span><strong>'+val(rankPoints)+'</strong></div></div></section><div style="height:16px"></div><section class="card"><div class="section-title">Détails Battle Royale</div><div class="list"><div class="row"><span>Éliminations</span><strong>'+val(kills)+'</strong></div><div class="row"><span>Morts</span><strong>'+val(deaths)+'</strong></div><div class="row"><span>Taux de victoire</span><strong>'+(winRate!=null?val(winRate)+' %':'—')+'</strong></div><div class="row"><span>Top 3</span><strong>'+val(top3)+'</strong></div><div class="row"><span>Top 5</span><strong>'+val(top5)+'</strong></div><div class="row"><span>Top 10</span><strong>'+val(top10)+'</strong></div></div></section>';
+
+  var overall='<section class="grid g4"><div class="card metric"><div class="label">Victoires</div><div class="value">'+val(wins)+'</div><div class="sub">Tous modes</div></div><div class="card metric"><div class="label">K/D</div><div class="value">'+val(kd)+'</div><div class="sub">Tous modes</div></div><div class="card metric"><div class="label">Niveau</div><div class="value">'+val(level)+'</div><div class="sub">'+(xp!=null?'XP : '+val(xp):'Profil')+'</div></div><div class="card metric"><div class="label">Parties</div><div class="value">'+val(matches)+'</div><div class="sub">Tous modes</div></div></section>';
+
+  var details='<div style="height:16px"></div><section class="card"><div class="section-title">Statistiques générales</div><div class="list"><div class="row"><span>Éliminations</span><strong>'+val(kills)+'</strong></div><div class="row"><span>Morts</span><strong>'+val(deaths)+'</strong></div><div class="row"><span>Taux de victoire</span><strong>'+(winRate!=null?val(winRate)+' %':'—')+'</strong></div><div class="row"><span>Top 3</span><strong>'+val(top3)+'</strong></div><div class="row"><span>Top 5</span><strong>'+val(top5)+'</strong></div><div class="row"><span>Top 10</span><strong>'+val(top10)+'</strong></div></div></section>';
+
+  var ranking='<div style="height:16px"></div><section class="card"><div class="section-title">Classement</div><div class="list"><div class="row"><span>Rang</span><strong>'+val(rank)+'</strong></div><div class="row"><span>Points</span><strong>'+val(rankPoints)+'</strong></div></div></section>';
+
+  var modesHtml=modeCards?'<div style="height:16px"></div><div class="section-title">Statistiques par mode</div><div class="grid g2">'+modeCards+'</div>':'';
+  box.innerHTML=overall+modesHtml+ranking+details;
 }
 function profile(){
   if(!FN.stats)FN.stats=readStatsStore();
