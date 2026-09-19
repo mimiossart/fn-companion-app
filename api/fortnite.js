@@ -149,74 +149,62 @@ export default async function handler(req,res){
       let progressNormalized={level:null,xp:null};
       let progressError=null,rankedError=null;
 
-      function findNumericByPattern(obj,patterns){
-        let found=null;
-        const wanted=patterns.map(function(p){return normalizeKey(p)});
-        function normalizeKey(v){return String(v||"").toLowerCase().replace(/[^a-z0-9]/g,"")}
-        function walk(node){
-          if(found!=null||node==null||typeof node!=="object")return;
-          if(Array.isArray(node)){node.forEach(walk);return}
-          Object.keys(node).forEach(function(key){
-            if(found!=null)return;
-            const nk=normalizeKey(key);
-            if(wanted.some(function(p){return nk===p||nk.indexOf(p)>=0})){
-              let v=node[key];
-              if(v&&typeof v==="object"){
-                v=v.value!=null?v.value:(v.current!=null?v.current:(v.total!=null?v.total:null));
-              }
-              if(v!=null&&v!==""&&!isNaN(Number(v)))found=Number(v);
-            }
-          });
-          if(found==null)Object.keys(node).forEach(function(key){walk(node[key])});
-        }
-        walk(obj);
-        return found;
-      }
-      try{
-        const seasonRes=await fetchWithTimeout(DATA_API+"/api/v1/profile/stats?displayName="+encodeURIComponent(name)+"&timeWindow=season",{headers});
-        const seasonText=await seasonRes.text();
-        if(seasonRes.ok){
-          let seasonJson=null;try{seasonJson=JSON.parse(seasonText)}catch(_){}
-          seasonStats=seasonJson&&seasonJson.data!==undefined?seasonJson.data:seasonJson;
-        }
-      }catch(_){}
-      try{
-        const candidates=[
-          DATA_API+"/api/v1/profile/level?displayName="+encodeURIComponent(name),
-          DATA_API+"/api/v1/profile/progress?displayName="+encodeURIComponent(name),
-          DATA_API+"/api/v1/profile/level/"+encodeURIComponent(accountId),
-          DATA_API+"/api/v1/profile/progress?accountId="+encodeURIComponent(accountId),
-          DATA_API+"/api/v1/profile/progress/"+encodeURIComponent(accountId)
-        ];
-        const successful=[];
-        let lastError=null;
-        for(let i=0;i<candidates.length;i++){
-          const r=await fetchWithTimeout(candidates[i],{headers});
+      // Les statistiques principales ne doivent jamais dépendre des endpoints
+      // secondaires de profil. On tente ces données séparément et rapidement.
+      async function optionalJson(url,timeoutMs){
+        try{
+          const r=await fetchWithTimeout(url,{headers},timeoutMs||5000);
           const text=await r.text();
           let json=null;try{json=JSON.parse(text)}catch(_){}
-          if(r.ok){
-            const payload=json&&json.data!==undefined?json.data:json;
-            if(payload!=null)successful.push(payload);
-          }else{
-            lastError={status:r.status,message:(json&&(json.error||json.message))||text.slice(0,500),url:candidates[i]};
+          const payload=json&&json.data!==undefined?json.data:json;
+          return {ok:r.ok,status:r.status,payload:payload,message:(json&&(json.error||json.message))||text.slice(0,500)};
+        }catch(e){
+          return {ok:false,status:0,payload:null,message:e.name==="AbortError"?"timeout":(e.message||"Erreur réseau")};
+        }
+      }
+
+      const profileResults=await Promise.all([
+        optionalJson(DATA_API+"/api/v1/profile/stats?displayName="+encodeURIComponent(name)+"&timeWindow=season",4500),
+        optionalJson(DATA_API+"/api/v1/profile/progress?displayName="+encodeURIComponent(name),4500),
+        optionalJson(DATA_API+"/api/v1/profile/level?displayName="+encodeURIComponent(name),4500)
+      ]);
+
+      if(profileResults[0].ok)seasonStats=profileResults[0].payload;
+
+      const progressPayloads=[];
+      if(profileResults[1].ok&&profileResults[1].payload!=null)progressPayloads.push(profileResults[1].payload);
+      if(profileResults[2].ok&&profileResults[2].payload!=null)progressPayloads.push(profileResults[2].payload);
+      if(progressPayloads.length){
+        progress=progressPayloads;
+        function findNumericByPattern(obj,patterns){
+          let found=null;
+          const wanted=patterns.map(function(p){return String(p||"").toLowerCase().replace(/[^a-z0-9]/g,"")});
+          function walk(node){
+            if(found!=null||node==null||typeof node!=="object")return;
+            if(Array.isArray(node)){node.forEach(walk);return}
+            Object.keys(node).forEach(function(key){
+              if(found!=null)return;
+              const nk=String(key||"").toLowerCase().replace(/[^a-z0-9]/g,"");
+              if(wanted.some(function(p){return nk===p||nk.indexOf(p)>=0})){
+                let v=node[key];
+                if(v&&typeof v==="object")v=v.value!=null?v.value:(v.current!=null?v.current:(v.total!=null?v.total:null));
+                if(v!=null&&v!==""&&!isNaN(Number(v)))found=Number(v);
+              }
+            });
+            if(found==null)Object.keys(node).forEach(function(key){walk(node[key])});
           }
+          walk(obj);
+          return found;
         }
-        if(successful.length){
-          progress=successful;
-          progressNormalized.level=findNumericByPattern(successful,["level","currentLevel","accountLevel","seasonLevel","profileLevel"]);
-          progressNormalized.xp=findNumericByPattern(successful,["xp","experience","currentXp","seasonXp","experiencePoints","totalXp"]);
-        }else if(lastError)progressError=lastError;
-      }catch(e){progressError={status:0,message:e.message||'Erreur réseau'}}
-      try{
-        const rankedRes=await fetchWithTimeout(DATA_API+"/api/v1/profile/ranked?displayName="+encodeURIComponent(name),{headers});
-        const rankedText=await rankedRes.text();
-        let rankedJson=null;try{rankedJson=JSON.parse(rankedText)}catch(_){}
-        if(rankedRes.ok){
-          ranked=rankedJson&&rankedJson.data!==undefined?rankedJson.data:rankedJson;
-        }else{
-          rankedError={status:rankedRes.status,message:(rankedJson&&(rankedJson.error||rankedJson.message))||rankedText.slice(0,500)};
-        }
-      }catch(e){rankedError={status:0,message:e.message||'Erreur réseau'}}
+        progressNormalized.level=findNumericByPattern(progressPayloads,["level","currentLevel","accountLevel","seasonLevel","profileLevel","battlePassLevel"]);
+        progressNormalized.xp=findNumericByPattern(progressPayloads,["xp","experience","currentXp","seasonXp","experiencePoints","totalXp"]);
+      }else{
+        const p1=profileResults[1],p2=profileResults[2];
+        progressError={status:p1.status||p2.status||0,message:p1.message||p2.message||"Profil indisponible"};
+      }
+      // Le ranked est optionnel et ne bloque jamais les stats principales.
+      ranked=null;
+      rankedError=null;
 
       return res.status(200).json({
         ok:true,
