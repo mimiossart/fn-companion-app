@@ -17,25 +17,44 @@ function addFav(id){var c=state.cosmetics.find(function(x){return x.id===id});if
 async function mapPage(){layout('<div class="toolbar"><button class="tab active">Battle Royale</button><button class="tab">POI</button><button class="tab">Itinéraire</button><span id="mapStatus" class="sub">Chargement de la carte…</span></div><div id="realMap" class="map map-real"></div><div style="height:16px"></div><section class="grid g3"><div class="card metric"><div class="label">POI</div><div id="poiCount" class="value">—</div></div><div class="card metric"><div class="label">Source</div><div class="value" style="font-size:22px">Fortnite API</div></div><div class="card metric"><div class="label">Interaction</div><div class="value">Active</div></div></section>');try{var d=await api('map');state.map=d;var map=document.querySelector('#realMap');var img=d.images&&(d.images.blank||d.images.zoomed||d.images.pois||d.images.all);map.innerHTML=(img?'<img class="map-image" src="'+esc(img)+'" alt="Carte Fortnite actuelle">':'')+'<div class="zone"></div><div class="mapinfo">Carte actuelle · POI réels</div>';var world=135000;(d.pois||[]).slice(0,80).forEach(function(p){var x=Number(p.location&&p.location.x),y=Number(p.location&&p.location.y);if(!isFinite(x)||!isFinite(y))return;var left=(y+world)/(2*world)*100,top=(1-(x+world)/(2*world))*100;if(left<1||left>99||top<1||top>99)return;var b=document.createElement('button');b.className='poi';b.style.left=left+'%';b.style.top=top+'%';b.textContent=p.name||'POI';b.onclick=function(){toast((p.name||'POI')+' sélectionné')};map.appendChild(b)});document.querySelector('#poiCount').textContent=(d.pois||[]).length;document.querySelector('#mapStatus').textContent='Carte synchronisée'}catch(e){document.querySelector('#realMap').innerHTML='<div class="notice map-error">'+esc(e.message)+'</div>'}}
 function quests(){var qs=[['Top 10 dans une partie',8,10,1200],['Infliger 5 000 dégâts',3470,5000,800],['Jouer 5 parties avec un ami',3,5,650],['Visiter 3 points d’intérêt',3,3,500]];layout('<section class="grid g2"><div class="card"><div class="section-title">Suivi des objectifs</div><div class="list">'+qs.map(function(q){var pct=Math.min(100,q[1]/q[2]*100);return '<div class="row challenge"><div><strong>'+q[0]+'</strong><div class="sub">'+q[1].toLocaleString('fr-FR')+' / '+q[2].toLocaleString('fr-FR')+' · '+q[3]+' XP</div><div class="progress"><i style="width:'+pct+'%"></i></div></div><span class="tag">'+(q[1]>=q[2]?'Terminé':'En cours')+'</span></div>'}).join('')+'</div></div><div class="card"><div class="section-title">Suivi Fortnite</div><p class="sub">La progression native des quêtes n’est pas exposée ici sans accès authentifié autorisé.</p></div></section>')}
 async function shop(){layout('<section class="hero"><div class="eyebrow">BOUTIQUE</div><h2>Objets actuellement proposés</h2><p>Les offres sont demandées au moment de l’ouverture de la page.</p></section><div id="shopGrid" class="grid g3"><div class="card"><div class="sub">Chargement…</div></div></div>');try{var d=await api('shop');state.shop=d;var entries=[].concat(d.featured||[],d.daily||[],d.specialFeatured||[],d.specialDaily||[]).flatMap(function(x){return x.entries||[x]}).filter(Boolean).slice(0,36);document.querySelector('#shopGrid').innerHTML=entries.map(function(e){var i=e.items&&e.items[0]||e.item||e;var img=i.images&&(i.images.icon||i.images.smallIcon);return '<div class="card item-card"><div class="cosmetic-img">'+(img?'<img src="'+esc(img)+'" alt="">':'🛒')+'</div><div class="item-body"><strong>'+esc(i.name||'Objet')+'</strong><div class="sub">'+(e.finalPrice!=null?esc(e.finalPrice)+' V-Bucks':'Offre')+'</div></div></div>'}).join('')||'<div class="card"><div class="sub">Aucune offre disponible.</div></div>'}catch(e){document.querySelector('#shopGrid').innerHTML='<div class="notice">'+esc(e.message)+'</div>'}}
-function statValue(obj,keys){for(var i=0;i<keys.length;i++){var v=obj&&obj[keys[i]];if(v!==undefined&&v!==null)return v}return null}
+function statValue(obj,keys){
+  for(var i=0;i<keys.length;i++){
+    var key=keys[i];
+    if(obj&&Object.prototype.hasOwnProperty.call(obj,key)&&obj[key]!==null&&obj[key]!==undefined)return obj[key];
+  }
+  return null
+}
+function findDeep(obj,keys,depth){
+  if(!obj||depth>5)return null;
+  var direct=statValue(obj,keys); if(direct!==null)return direct;
+  if(typeof obj!=='object')return null;
+  var vals=Array.isArray(obj)?obj: Object.keys(obj).map(function(k){return obj[k]});
+  for(var i=0;i<vals.length;i++){var hit=findDeep(vals[i],keys,depth+1);if(hit!==null)return hit}
+  return null
+}
 function normalizeStats(d){
-  var all=(d&&d.stats&&d.stats.all)||{};
-  var overall=all.overall||{};
-  var ranked=(d&&d.ranked)||all.ranked||{};
+  var stats=d&&d.stats||{};
+  var account=d&&d.account||{};
+  var wins=findDeep(stats,['br_wins_total','wins','victories'],0);
+  var kills=findDeep(stats,['br_kills_total','kills','eliminations'],0);
+  var deaths=findDeep(stats,['br_deaths_total','deaths'],0);
+  var matches=findDeep(stats,['br_matches_total','matches','matchesPlayed'],0);
+  var kd=findDeep(stats,['br_kd','kd','kdratio','killDeathRatio'],0);
+  var winRate=findDeep(stats,['br_winrate','winRate','win_rate'],0);
+  var minutes=findDeep(stats,['br_minutes_played','minutesPlayed','minutes_played'],0);
+  var ranked=d&&d.ranked||null;
+  var progress=d&&d.progress||null;
   return {
-    account:d&&d.account||{},
+    account:account,
     battlePass:d&&d.battlePass||{},
     image:d&&d.image||null,
-    wins:statValue(overall,['wins']),
-    kills:statValue(overall,['kills']),
-    deaths:statValue(overall,['deaths']),
-    kd:statValue(overall,['kd']),
-    matches:statValue(overall,['matches']),
-    winRate:statValue(overall,['winRate']),
-    score:statValue(overall,['score']),
-    minutesPlayed:statValue(overall,['minutesPlayed']),
-    lastModified:statValue(overall,['lastModified']),
-    rank:statValue(ranked,['rank','division','displayRank'])||statValue(d,['rank','currentRank'])||null
+    wins:wins,kills:kills,deaths:deaths,matches:matches,kd:kd,winRate:winRate,
+    score:findDeep(stats,['score','br_score'],0),
+    minutesPlayed:minutes,
+    lastModified:findDeep(stats,['lastModified','last_modified','updatedAt'],0),
+    rank:findDeep(ranked,['rank','displayRank','division','tier','currentRank'],0),
+    rankPoints:findDeep(ranked,['points','rating','score','rankPoints','rp'],0),
+    rankedRaw:ranked,progress:progress
   }
 }
 async function loadStats(){
