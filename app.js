@@ -615,8 +615,11 @@ async function loadPlayerStats(){
   if(button){button.disabled=true;button.textContent='Chargement…'}
   try{
     var r=await fetch('/api/fortnite?type=stats&name='+encodeURIComponent(name));
+    var rawText=await r.text();
     var d=null;
-    try{d=await r.json()}catch(_){d={}}
+    try{d=JSON.parse(rawText)}catch(_){
+      throw new Error((rawText||'Réponse serveur invalide').replace(/\s+/g,' ').slice(0,300));
+    }
     if(!r.ok)throw new Error(d.error||('Erreur serveur '+r.status));
     FN.stats=d;
     stateStatsStore(d);
