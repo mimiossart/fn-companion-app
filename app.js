@@ -187,7 +187,8 @@ async function shop(){
       return '<article class="card item-card"><div class="cosmetic-img">'+(x.image?'<img src="'+esc(x.image)+'" alt="'+esc(x.name)+'" loading="lazy">':'🛒')+'</div><div class="item-body"><div class="eyebrow" style="font-size:9px">'+esc(x.rarity||"Fortnite")+'</div><strong>'+esc(x.name)+'</strong><div class="sub">'+(x.price!=null?esc(x.price)+" V-Bucks":"Prix non indiqué")+'</div></div></article>';
     }).join("")||'<div class="card"><div class="sub">Aucune offre retournée.</div></div>';
   }catch(e){
-    document.getElementById("fn-shop").innerHTML='<div class="notice">La boutique réelle n’est pas disponible pour le moment. Vérifie la clé API du fournisseur.</div>';
+    var msg=e&&e.message?e.message:"Erreur inconnue";
+    document.getElementById("fn-shop").innerHTML='<div class="notice">Impossible de charger la boutique : '+esc(msg)+'<br><span class="sub">Actualise la page dans quelques secondes.</span></div>';
   }
 }
 
