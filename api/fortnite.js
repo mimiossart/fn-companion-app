@@ -141,13 +141,22 @@ export default async function handler(req,res){
         }
       }catch(_){}
       try{
-        const progressRes=await fetch(DATA_API+"/api/v1/profile/progress?displayName="+encodeURIComponent(name),{headers});
-        const progressText=await progressRes.text();
-        let progressJson=null;try{progressJson=JSON.parse(progressText)}catch(_){}
-        if(progressRes.ok){
-          progress=progressJson&&progressJson.data!==undefined?progressJson.data:progressJson;
+        // Profile level is exposed as its own Pro endpoint.
+        const levelRes=await fetch(DATA_API+"/api/v1/profile/level?displayName="+encodeURIComponent(name),{headers});
+        const levelText=await levelRes.text();
+        let levelJson=null;try{levelJson=JSON.parse(levelText)}catch(_){}
+        if(levelRes.ok){
+          progress=levelJson&&levelJson.data!==undefined?levelJson.data:levelJson;
         }else{
-          progressError={status:progressRes.status,message:(progressJson&&(progressJson.error||progressJson.message))||progressText.slice(0,500)};
+          // Fallback to the documented progress endpoint.
+          const progressRes=await fetch(DATA_API+"/api/v1/profile/progress?displayName="+encodeURIComponent(name),{headers});
+          const progressText=await progressRes.text();
+          let progressJson=null;try{progressJson=JSON.parse(progressText)}catch(_){}
+          if(progressRes.ok){
+            progress=progressJson&&progressJson.data!==undefined?progressJson.data:progressJson;
+          }else{
+            progressError={status:progressRes.status,message:(progressJson&&(progressJson.error||progressJson.message))||progressText.slice(0,500)};
+          }
         }
       }catch(e){progressError={status:0,message:e.message||'Erreur réseau'}}
       try{
