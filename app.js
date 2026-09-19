@@ -625,7 +625,19 @@ async function loadPlayerStats(){
     toast('Statistiques chargées');
   }catch(e){
     var box=document.getElementById('profile-stats');
-    if(box)box.innerHTML='<div class="notice">Impossible de charger les statistiques : '+esc(e.message||'Erreur inconnue')+'</div>';
+    var cached=readStatsStore();
+    if(cached){
+      FN.stats=cached;
+      renderProfileStats();
+      if(box){
+        var note=document.createElement('div');
+        note.className='notice';
+        note.textContent='Dernières données affichées. Actualisation API impossible : '+(e.message||'Erreur inconnue');
+        box.insertBefore(note,box.firstChild);
+      }
+    }else if(box){
+      box.innerHTML='<div class="notice">Impossible de charger les statistiques : '+esc(e.message||'Erreur inconnue')+'</div>';
+    }
     toast(e.message||'Stats indisponibles');
   }finally{
     button=document.getElementById('load-stats');
