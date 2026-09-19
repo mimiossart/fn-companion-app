@@ -32,8 +32,8 @@ export default async function handler(req,res){
         ||(accountRoot&&(accountRoot.id||accountRoot.accountId));
       if(!accountId)return res.status(502).json({error:"Le service a trouvé le compte mais n'a pas renvoyé son ID Epic."});
 
-      const statKeys="br_wins_total,br_kills_total,br_deaths_total,br_matches_total,br_kd,br_winrate,br_top3,br_top5,br_top10";
-      const statsRes=await fetch(DATA_API+"/api/v2/stats/"+encodeURIComponent(accountId)+"?stats="+encodeURIComponent(statKeys),{headers});
+      // Endpoint documenté : récupération complète des statistiques par account ID.
+      const statsRes=await fetch(DATA_API+"/api/v2/stats/"+encodeURIComponent(accountId),{headers});
       const stats=await readJson(statsRes);
       if(!stats.ok){
         const apiMsg=stats.data&&(stats.data.error||stats.data.message);
