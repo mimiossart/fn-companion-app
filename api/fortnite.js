@@ -110,7 +110,7 @@ export default async function handler(req,res){
         // the lifetime total is absent, preventing the same value being counted twice.
         wins:statTotal(['br_wins_total'],['br_placetop1']),
         kills:statTotal(['br_kills_total'],['br_kills','kills','eliminations']),
-        deaths:statTotal(['br_deaths_total','deaths_total','deathstotal'],['br_deaths','deaths','eliminated']),
+        deaths:statTotal(['br_deaths_total'],['br_deaths','deaths']),
         matches:statTotal(['br_matches_total'],['br_matches','br_matchesplayed']),
         minutes:statTotal(['br_minutes_total'],['br_minutesplayed']),
         top3:statTotal(['br_top3'],['br_placetop3']),
@@ -122,9 +122,6 @@ export default async function handler(req,res){
 
       if(normalized.kd==null && normalized.kills!=null && normalized.deaths!=null && Number(normalized.deaths)>0){
         normalized.kd=Number(normalized.kills)/Number(normalized.deaths);
-      }
-      if(normalized.deaths==null && normalized.kills!=null && normalized.kd!=null && Number(normalized.kd)>0){
-        normalized.deaths=Math.max(0,Math.round(Number(normalized.kills)/Number(normalized.kd)));
       }
       if(normalized.kd==null && normalized.kills!=null && normalized.matches!=null && Number(normalized.matches)>Number(normalized.wins||0)){
         const estimatedDeaths=Number(normalized.matches)-Number(normalized.wins||0);
@@ -139,13 +136,14 @@ export default async function handler(req,res){
 
       function findNumericByPattern(obj,patterns){
         let found=null;
-        const wanted=patterns.map(function(p){return String(p||"").toLowerCase().replace(/[^a-z0-9]/g,"")});
+        const wanted=patterns.map(function(p){return normalizeKey(p)});
+        function normalizeKey(v){return String(v||"").toLowerCase().replace(/[^a-z0-9]/g,"")}
         function walk(node){
           if(found!=null||node==null||typeof node!=="object")return;
           if(Array.isArray(node)){node.forEach(walk);return}
           Object.keys(node).forEach(function(key){
             if(found!=null)return;
-            const nk=String(key||"").toLowerCase().replace(/[^a-z0-9]/g,"");
+            const nk=normalizeKey(key);
             if(wanted.some(function(p){return nk===p||nk.indexOf(p)>=0})){
               let v=node[key];
               if(v&&typeof v==="object"){
@@ -159,7 +157,6 @@ export default async function handler(req,res){
         walk(obj);
         return found;
       }
-
       try{
         const seasonRes=await fetch(DATA_API+"/api/v1/profile/stats?displayName="+encodeURIComponent(name)+"&timeWindow=season",{headers});
         const seasonText=await seasonRes.text();
@@ -168,21 +165,33 @@ export default async function handler(req,res){
           seasonStats=seasonJson&&seasonJson.data!==undefined?seasonJson.data:seasonJson;
         }
       }catch(_){}
-
-      // Endpoint Pro documenté pour le niveau/XP du profil.
       try{
-        const progressRes=await fetch(DATA_API+"/api/v1/profile/progress?displayName="+encodeURIComponent(name),{headers});
-        const progressText=await progressRes.text();
-        let progressJson=null;try{progressJson=JSON.parse(progressText)}catch(_){}
-        if(progressRes.ok){
-          progress=progressJson&&progressJson.data!==undefined?progressJson.data:progressJson;
-          progressNormalized.level=findNumericByPattern(progress,["level","currentLevel","accountLevel","seasonLevel","profileLevel","battlePassLevel"]);
-          progressNormalized.xp=findNumericByPattern(progress,["xp","experience","currentXp","seasonXp","experiencePoints","totalXp"]);
-        }else{
-          progressError={status:progressRes.status,message:(progressJson&&(progressJson.error||progressJson.message))||progressText.slice(0,500)};
+        const candidates=[
+          DATA_API+"/api/v1/profile/level?displayName="+encodeURIComponent(name),
+          DATA_API+"/api/v1/profile/progress?displayName="+encodeURIComponent(name),
+          DATA_API+"/api/v1/profile/level/"+encodeURIComponent(accountId),
+          DATA_API+"/api/v1/profile/progress?accountId="+encodeURIComponent(accountId),
+          DATA_API+"/api/v1/profile/progress/"+encodeURIComponent(accountId)
+        ];
+        const successful=[];
+        let lastError=null;
+        for(let i=0;i<candidates.length;i++){
+          const r=await fetch(candidates[i],{headers});
+          const text=await r.text();
+          let json=null;try{json=JSON.parse(text)}catch(_){}
+          if(r.ok){
+            const payload=json&&json.data!==undefined?json.data:json;
+            if(payload!=null)successful.push(payload);
+          }else{
+            lastError={status:r.status,message:(json&&(json.error||json.message))||text.slice(0,500),url:candidates[i]};
+          }
         }
-      }catch(e){progressError={status:0,message:e.message||"Erreur réseau"}}
-
+        if(successful.length){
+          progress=successful;
+          progressNormalized.level=findNumericByPattern(successful,["level","currentLevel","accountLevel","seasonLevel","profileLevel"]);
+          progressNormalized.xp=findNumericByPattern(successful,["xp","experience","currentXp","seasonXp","experiencePoints","totalXp"]);
+        }else if(lastError)progressError=lastError;
+      }catch(e){progressError={status:0,message:e.message||'Erreur réseau'}}
       try{
         const rankedRes=await fetch(DATA_API+"/api/v1/profile/ranked?displayName="+encodeURIComponent(name),{headers});
         const rankedText=await rankedRes.text();
