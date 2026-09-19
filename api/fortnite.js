@@ -143,23 +143,26 @@ export default async function handler(req,res){
       try{
         const candidates=[
           DATA_API+"/api/v1/profile/level?displayName="+encodeURIComponent(name),
-          DATA_API+"/api/v1/profile/level/"+encodeURIComponent(accountId),
           DATA_API+"/api/v1/profile/progress?displayName="+encodeURIComponent(name),
+          DATA_API+"/api/v1/profile/level/"+encodeURIComponent(accountId),
           DATA_API+"/api/v1/profile/progress?accountId="+encodeURIComponent(accountId),
           DATA_API+"/api/v1/profile/progress/"+encodeURIComponent(accountId)
         ];
+        const successful=[];
         let lastError=null;
         for(let i=0;i<candidates.length;i++){
           const r=await fetch(candidates[i],{headers});
           const text=await r.text();
           let json=null;try{json=JSON.parse(text)}catch(_){}
           if(r.ok){
-            progress=json&&json.data!==undefined?json.data:json;
-            break;
+            const payload=json&&json.data!==undefined?json.data:json;
+            if(payload!=null)successful.push(payload);
+          }else{
+            lastError={status:r.status,message:(json&&(json.error||json.message))||text.slice(0,500),url:candidates[i]};
           }
-          lastError={status:r.status,message:(json&&(json.error||json.message))||text.slice(0,500),url:candidates[i]};
         }
-        if(progress==null&&lastError)progressError=lastError;
+        if(successful.length)progress=successful;
+        else if(lastError)progressError=lastError;
       }catch(e){progressError={status:0,message:e.message||'Erreur réseau'}}
       try{
         const rankedRes=await fetch(DATA_API+"/api/v1/profile/ranked?displayName="+encodeURIComponent(name),{headers});
