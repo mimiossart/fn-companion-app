@@ -6,3 +6,6 @@ App web responsive : accueil, navigation réelle, carte interactive, défis, cat
 Le endpoint Vercel `/api/fortnite/islands` utilise l’API Fortnite Ecosystem et le flux OAuth client-credentials d’Epic quand `EPIC_CLIENT_ID` et `EPIC_CLIENT_SECRET` sont configurés dans Vercel.
 
 Les secrets restent côté serveur. Aucun mot de passe Epic n’est demandé par l’interface.
+
+
+<!-- deployment trigger 2026-09-19 -->
