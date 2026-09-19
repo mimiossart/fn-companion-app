@@ -1,4 +1,6 @@
-function safeJson(key,fallback){try{return JSON.parse(localStorage.getItem(key)||'null')??fallback}catch(e){return fallback}}\nfunction safeSet(key,value){try{localStorage.setItem(key,JSON.stringify(value))}catch(e){}}\nconst state={page:'home',player:safeJson('fn_player_v2',null),cosmetics:[],map:null,shop:null,stats:null,history:safeJson('fn_stats_history',[]),lastSync:null};
+function safeJson(key,fallback){try{return JSON.parse(localStorage.getItem(key)||'null')??fallback}catch(e){return fallback}}
+function safeSet(key,value){try{localStorage.setItem(key,JSON.stringify(value))}catch(e){}}
+const state={page:'home',player:safeJson('fn_player_v2',null),cosmetics:[],map:null,shop:null,stats:null,history:safeJson('fn_stats_history',[]),lastSync:null};
 const routes={home:'Accueil',map:'Carte',quests:'Défis',items:'Skins & objets',shop:'Boutique',profile:'Profil',live:'Données live'};
 const icons={home:'⌂',map:'⌖',quests:'✓',items:'◈',shop:'🛒',profile:'◉',live:'↗'};
 function esc(s){return String(s==null?'':s).replace(/[&<>\"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[c]})}
