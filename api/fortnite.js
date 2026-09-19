@@ -50,8 +50,9 @@ export default async function handler(req,res){
   if(!paths[type])return res.status(400).json({error:"Type inconnu."});
 
   try{
-    const headers=key?{authorization:key}:{};
-    const r=await fetch(UPSTREAM+paths[type],{headers});
+    // Fortnite-API.com public endpoints do not use the player-stats API key.
+    // Do not forward FORTNITE_API_KEY to this upstream, because it belongs to api-fortnite.com.
+    const r=await fetch(UPSTREAM+paths[type]);
     const text=await r.text();
     res.setHeader("Cache-Control","s-maxage=120, stale-while-revalidate=600");
     res.status(r.status).setHeader("Content-Type",r.headers.get("content-type")||"application/json").send(text);
