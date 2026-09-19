@@ -40,7 +40,8 @@ function renderShop(filter){
   var box=document.querySelector('#shopGrid');if(!box)return;
   var list=(state.shopEntries||[]).filter(function(x){return filter==='all'||x.type.indexOf(filter)>=0});
   box.innerHTML=list.slice(0,80).map(function(x){
-    return '<div class="card item-card"><div class="cosmetic-img">'+(x.img?'<img loading="lazy" src="'+esc(x.img)+'" alt="'+esc(x.name)+'">':'🛒')+'</div><div class="item-body"><div class="eyebrow" style="font-size:9px">'+esc(x.rarity||'Fortnite')+'</div><strong>'+esc(x.name)+'</strong><div class="sub">'+(x.price!=null?esc(x.price)+' V-Bucks':'Prix non indiqué')+'</div><button class="btn" onclick="toast(\'Offre sélectionnée : '+esc(x.name).replace(/'/g,"\\\\'")+'\')">Voir l’offre</button></div></div>';
+    var label=esc(x.name);
+    return '<div class="card item-card"><div class="cosmetic-img">'+(x.img?'<img loading="lazy" src="'+esc(x.img)+'" alt="'+label+'">':'🛒')+'</div><div class="item-body"><div class="eyebrow" style="font-size:9px">'+esc(x.rarity||'Fortnite')+'</div><strong>'+label+'</strong><div class="sub">'+(x.price!=null?esc(x.price)+' V-Bucks':'Prix non indiqué')+'</div><button class="btn" onclick="toast(\\'Offre sélectionnée\\')">Voir l’offre</button></div></div>';
   }).join('')||'<div class="card"><div class="sub">Aucune offre pour ce filtre.</div></div>';
 }
 function shopFilter(filter,b){document.querySelectorAll('.toolbar .tab').forEach(function(x){x.classList.remove('active')});if(b)b.classList.add('active');renderShop(filter)}
