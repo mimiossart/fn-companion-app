@@ -710,7 +710,7 @@ function filterPage(v){
 
 function go(p){FN.page=p;render();window.scrollTo(0,0)}
 function render(){
-  var fn={home:home,map:mapPage,quests:quests,items:items,shop:shop,profile:profile,live:live}[FN.page]||home;
+  var fn={home:home,map:mapPage,quests:quests,items:items,shop:shop,profile:profile,tournaments:tournaments,live:live}[FN.page]||home;
   try{fn()}catch(e){console.error(e);document.getElementById("app").innerHTML='<div style="padding:30px;color:white"><h1>FN Companion</h1><p>Une erreur a été détectée. Recharge la page.</p></div>'}
 }
 
