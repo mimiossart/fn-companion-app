@@ -299,20 +299,40 @@ async function mapPage(){
     var d=await r.json();
     if(!r.ok)throw new Error(d.error||"Carte indisponible");
     FN.map=d;
+
+    var payload=d&&d.data!==undefined?d.data:d;
     var box=document.getElementById("fn-map");
-    var img=d.images&&(d.images.blank||d.images.zoomed||d.images.pois||d.images.all);
-    box.innerHTML=(img?'<img class="map-image" src="'+esc(img)+'" alt="Carte Fortnite">':'')+'<div class="zone"></div><div class="mapinfo">Carte actuelle · POI live</div>';
-    (d.pois||[]).slice(0,50).forEach(function(p){
-      var x=Number(p.location&&p.location.x),y=Number(p.location&&p.location.y);
+    var img=d.image||(payload&&payload.image)||((payload&&payload.images)&&(payload.images.blank||payload.images.zoomed||payload.images.pois||payload.images.all));
+    var pois=payload&&Array.isArray(payload.pois)?payload.pois:[];
+    if(!pois.length&&payload&&Array.isArray(payload.pointsOfInterest))pois=payload.pointsOfInterest;
+
+    box.innerHTML=(img?'<img class="map-image" src="'+esc(img)+'" alt="Carte Fortnite">':'<div class="notice">Image de la carte indisponible.</div>')+'<div class="zone"></div><div class="mapinfo">Carte actuelle · '+pois.length+' POI</div>';
+
+    pois.slice(0,100).forEach(function(p){
+      var x=Number(p.location&&p.location.x!=null?p.location.x:p.x);
+      var y=Number(p.location&&p.location.y!=null?p.location.y:p.y);
       if(!isFinite(x)||!isFinite(y))return;
       var b=document.createElement("button");
-      b.className="poi";b.textContent=p.name||"POI";b.style.left=((y+135000)/270000*100)+"%";b.style.top=((1-(x+135000)/270000)*100)+"%";
-      b.onclick=function(){toast((p.name||"POI")+" sélectionné")};
+      b.className="poi";
+      b.textContent=p.name||p.displayName||"POI";
+      var bounds=payload&&payload.worldBounds;
+      if(bounds&&bounds.min&&bounds.max){
+        var px=((x-bounds.min.x)/(bounds.max.x-bounds.min.x))*100;
+        var py=(1-((y-bounds.min.y)/(bounds.max.y-bounds.min.y)))*100;
+        b.style.left=px+"%";b.style.top=py+"%";
+      }else{
+        b.style.left=((y+135000)/270000*100)+"%";
+        b.style.top=((1-(x+135000)/270000)*100)+"%";
+      }
+      b.onclick=function(){toast((p.name||p.displayName||"POI")+" sélectionné")};
       box.appendChild(b);
     });
-    var st=document.getElementById("fn-map-status");if(st)st.textContent="Carte synchronisée · "+((d.pois||[]).length)+" POI";
+
+    var st=document.getElementById("fn-map-status");
+    if(st)st.textContent="Carte synchronisée · "+pois.length+" POI";
   }catch(e){
-    var b=document.getElementById("fn-map");if(b)b.innerHTML='<div class="notice map-error">'+esc(e.message)+'</div>';
+    var b=document.getElementById("fn-map");
+    if(b)b.innerHTML='<div class="notice map-error">'+esc(e.message)+'</div>';
   }
 }
 
