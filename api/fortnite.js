@@ -163,7 +163,9 @@ export default async function handler(req,res){
     if(!name)return res.status(400).json({error:"Nom de joueur manquant."});
     if(!key)return res.status(503).json({error:"FORTNITE_API_KEY n'est pas configurée dans Vercel."});
     try{
-      const accountRes=await fetch(DATA_API+"/api/v1/account/displayName/"+encodeURIComponent(name),{headers:{"x-api-key":key}});
+      const accountRes=await fetch(DATA_API+"/api/v1/account/displayName/"+encodeURIComponent(name),{
+        headers:{"x-api-key":key}
+      });
       const account=await readJson(accountRes);
       if(!account.ok){
         const msg=account.data&&(account.data.error||account.data.message);
@@ -175,33 +177,29 @@ export default async function handler(req,res){
       const accountId=(accountData&&(accountData.id||accountData.accountId))||(root&&(root.id||root.accountId));
       if(!accountId)return res.status(502).json({error:"ID Epic introuvable."});
 
-      // The Swagger-generated request uses the endpoint without accountId in the path.
-      const tokenRes=await fetch(DATA_API+"/api/v1/oauth/get-token",{
-        headers:{"x-api-key":key,"accept":"*/*"}
-      });
-      const token=await readJson(tokenRes);
-      if(!token.ok){
-        const msg=token.data&&(token.data.error||token.data.message||token.data.title||token.data.detail);
-        const detail=msg||token.raw||"Réponse OAuth vide.";
-        return res.status(token.status).json({error:"OAuth GetToken ("+token.status+") : "+String(detail).slice(0,500)});
-      }
-
-      const tokenRoot=token.data&&token.data.data!==undefined?token.data.data:token.data;
-      const fortniteToken=(typeof tokenRoot==="string"
-        ? tokenRoot
-        : tokenRoot&&(
-          tokenRoot.token||tokenRoot.accessToken||tokenRoot.fortniteToken||tokenRoot["x-fortnite-token"]
-        ));
-      if(!fortniteToken){
-        return res.status(502).json({error:"OAuth a répondu, mais aucun token Fortnite n'a été renvoyé."});
-      }
-
+      // The current API is documented as using one x-api-key for all endpoints,
+      // including Pro Quests. Try the quests endpoint directly first.
       const questRes=await fetch(DATA_API+"/api/v2/quests/"+encodeURIComponent(accountId),{
-        headers:{"x-api-key":key,"x-fortnite-token":fortniteToken}
+        headers:{"x-api-key":key}
       });
       const body=await questRes.text();
+
+      if(!questRes.ok){
+        let detail=body;
+        try{
+          const parsed=JSON.parse(body);
+          detail=parsed.error||parsed.message||body;
+        }catch(_){}
+        if(questRes.status===401||questRes.status===403){
+          return res.status(questRes.status).json({
+            error:"L'API des quêtes refuse la clé API ("+questRes.status+"). Réponse : "+String(detail).slice(0,500)
+          });
+        }
+        return res.status(questRes.status).setHeader("Content-Type",questRes.headers.get("content-type")||"application/json").send(body);
+      }
+
       res.setHeader("Cache-Control","no-store");
-      res.status(questRes.status).setHeader("Content-Type",questRes.headers.get("content-type")||"application/json").send(body);
+      res.status(200).setHeader("Content-Type",questRes.headers.get("content-type")||"application/json").send(body);
       return;
     }catch(e){
       return res.status(502).json({error:e.message||"Quêtes indisponibles."});
