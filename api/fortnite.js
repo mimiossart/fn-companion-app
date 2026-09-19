@@ -145,67 +145,23 @@ export default async function handler(req,res){
       if(normalized.winRate==null && normalized.wins!=null && normalized.matches!=null && Number(normalized.matches)>0){
         normalized.winRate=(Number(normalized.wins)/Number(normalized.matches))*100;
       }
-      let seasonStats=null,progress=null,ranked=null;
-      let progressNormalized={level:null,xp:null};
-      let progressError=null,rankedError=null;
-
-      // Les statistiques principales ne doivent jamais dépendre des endpoints
-      // secondaires de profil. On tente ces données séparément et rapidement.
-      async function optionalJson(url,timeoutMs){
-        try{
-          const r=await fetchWithTimeout(url,{headers},timeoutMs||5000);
-          const text=await r.text();
-          let json=null;try{json=JSON.parse(text)}catch(_){}
-          const payload=json&&json.data!==undefined?json.data:json;
-          return {ok:r.ok,status:r.status,payload:payload,message:(json&&(json.error||json.message))||text.slice(0,500)};
-        }catch(e){
-          return {ok:false,status:0,payload:null,message:e.name==="AbortError"?"timeout":(e.message||"Erreur réseau")};
-        }
-      }
-
-      const profileResults=await Promise.all([
-        optionalJson(DATA_API+"/api/v1/profile/stats?displayName="+encodeURIComponent(name)+"&timeWindow=season",4500),
-        optionalJson(DATA_API+"/api/v1/profile/progress?displayName="+encodeURIComponent(name),4500),
-        optionalJson(DATA_API+"/api/v1/profile/level?displayName="+encodeURIComponent(name),4500)
-      ]);
-
-      if(profileResults[0].ok)seasonStats=profileResults[0].payload;
-
-      const progressPayloads=[];
-      if(profileResults[1].ok&&profileResults[1].payload!=null)progressPayloads.push(profileResults[1].payload);
-      if(profileResults[2].ok&&profileResults[2].payload!=null)progressPayloads.push(profileResults[2].payload);
-      if(progressPayloads.length){
-        progress=progressPayloads;
-        function findNumericByPattern(obj,patterns){
-          let found=null;
-          const wanted=patterns.map(function(p){return String(p||"").toLowerCase().replace(/[^a-z0-9]/g,"")});
-          function walk(node){
-            if(found!=null||node==null||typeof node!=="object")return;
-            if(Array.isArray(node)){node.forEach(walk);return}
-            Object.keys(node).forEach(function(key){
-              if(found!=null)return;
-              const nk=String(key||"").toLowerCase().replace(/[^a-z0-9]/g,"");
-              if(wanted.some(function(p){return nk===p||nk.indexOf(p)>=0})){
-                let v=node[key];
-                if(v&&typeof v==="object")v=v.value!=null?v.value:(v.current!=null?v.current:(v.total!=null?v.total:null));
-                if(v!=null&&v!==""&&!isNaN(Number(v)))found=Number(v);
-              }
-            });
-            if(found==null)Object.keys(node).forEach(function(key){walk(node[key])});
-          }
-          walk(obj);
-          return found;
-        }
-        progressNormalized.level=findNumericByPattern(progressPayloads,["level","currentLevel","accountLevel","seasonLevel","profileLevel","battlePassLevel"]);
-        progressNormalized.xp=findNumericByPattern(progressPayloads,["xp","experience","currentXp","seasonXp","experiencePoints","totalXp"]);
-      }else{
-        const p1=profileResults[1],p2=profileResults[2];
-        progressError={status:p1.status||p2.status||0,message:p1.message||p2.message||"Profil indisponible"};
-      }
-      // Le ranked est optionnel et ne bloque jamais les stats principales.
-      ranked=null;
-      rankedError=null;
-
+      // Les statistiques principales sont retournées immédiatement.
+      // Les données de profil (niveau/XP/ranked) restent optionnelles pour ne
+      // jamais empêcher le chargement des victoires, K/D et parties.
+      return res.status(200).json({
+        ok:true,
+        account:accountData,
+        accountId:accountId,
+        stats:raw,
+        rawStatsEnvelope:rawEnvelope,
+        normalized:normalized,
+        seasonStats:null,
+        progress:null,
+        progressNormalized:{level:null,xp:null},
+        progressError:{status:0,message:"Profil optionnel non chargé"},
+        ranked:null,
+        rankedError:null
+      });
       return res.status(200).json({
         ok:true,
         account:accountData,
