@@ -270,50 +270,109 @@ export default async function handler(req,res){
     }
   }
   if(type==="shop"){
-    const cacheHeader="public, s-maxage=82800, stale-while-revalidate=86400, stale-if-error=86400";
     try{
-      // Source principale : API-Fortnite avec la clé serveur.
+      async function fetchShop(url,headers){
+        const r=await fetchWithTimeout(url,{headers:headers||{"accept":"application/json"}},4500);
+        const text=await r.text();
+        let json=null;try{json=JSON.parse(text)}catch(_){}
+        return {ok:r.ok,status:r.status,json:json,text:text};
+      }
+
+      let source=null;
       if(key){
-        try{
-          const primary=await fetchWithTimeout(
-            DATA_API+"/api/v1/shop?lang=fr",
-            {headers:{"x-api-key":key,"accept":"application/json"}},
-            4500
-          );
-          const primaryBody=await primary.text();
-          if(primary.ok){
-            res.setHeader("Cache-Control",cacheHeader);
-            res.setHeader("X-FN-Source","api-fortnite");
-            res.setHeader("Content-Type",primary.headers.get("content-type")||"application/json");
-            return res.status(200).send(primaryBody);
-          }
-        }catch(_){}
+        const primary=await fetchShop(
+          DATA_API+"/api/v1/shop?lang=fr",
+          {"x-api-key":key,"accept":"application/json"}
+        );
+        if(primary.ok)source=primary.json;
       }
 
-      // Fallback public : indépendant de la clé et de l'OAuth.
-      const fallback=await fetchWithTimeout(
-        "https://fortnite-api.com/v2/shop?language=fr",
-        {headers:{"accept":"application/json"}},
-        4500
-      );
-      const fallbackBody=await fallback.text();
-      if(fallback.ok){
-        res.setHeader("Cache-Control",cacheHeader);
-        res.setHeader("X-FN-Source","fortnite-api.com");
-        res.setHeader("Content-Type",fallback.headers.get("content-type")||"application/json");
-        return res.status(200).send(fallbackBody);
+      if(!source){
+        const fallback=await fetchShop(
+          "https://fortnite-api.com/v2/shop?language=fr",
+          {"accept":"application/json"}
+        );
+        if(fallback.ok)source=fallback.json;
       }
 
-      let msg="Les deux sources de boutique sont indisponibles.";
-      try{
-        const j=JSON.parse(fallbackBody);
-        msg=j.error||j.message||msg;
-      }catch(_){}
-      return res.status(fallback.status>=500?502:fallback.status).json({error:msg,upstreamStatus:fallback.status});
+      if(!source){
+        return res.status(502).json({error:"Les sources de boutique sont temporairement indisponibles."});
+      }
+
+      const root=source&&source.data!==undefined?source.data:source;
+      const out=[];
+      const seen={};
+
+      function textValue(v){
+        if(v==null)return "";
+        if(typeof v==="string"||typeof v==="number")return String(v);
+        if(typeof v==="object")return String(v.displayValue||v.value||v.name||v.title||"");
+        return "";
+      }
+
+      function addItem(obj,section){
+        if(!obj||typeof obj!=="object")return;
+        const title=textValue(obj.name)||textValue(obj.displayName)||textValue(obj.title)||textValue(obj.devName)||textValue(obj.itemName);
+        const image=(obj.images&&(obj.images.featured||obj.images.icon||obj.images.smallIcon||obj.images.url))||obj.image||obj.icon||"";
+        const price=obj.finalPrice!=null?obj.finalPrice:(obj.price!=null?obj.price:(obj.vbucks!=null?obj.vbucks:null));
+        const prices=Array.isArray(obj.prices)?obj.prices:[];
+        const p=prices.find(x=>x&&x.finalPrice!=null)||prices[0];
+        const finalPrice=price!=null?price:(p&&p.finalPrice!=null?p.finalPrice:null);
+        const id=obj.offerId||obj.offerID||obj.id||obj.offer_id||"";
+        if(!title&&!id)return;
+        const key2=String(id||title)+"|"+String(finalPrice);
+        if(seen[key2])return;
+        seen[key2]=true;
+        out.push({
+          name:title||id,
+          image:image,
+          rarity:textValue(obj.rarity),
+          price:finalPrice,
+          section:section||"Boutique",
+          offerId:id,
+          itemCount:1
+        });
+      }
+
+      function walk(node,section,depth){
+        if(node==null||depth>12)return;
+        if(Array.isArray(node)){
+          node.forEach(x=>walk(x,section,depth+1));
+          return;
+        }
+        if(typeof node!=="object")return;
+
+        let local=section;
+        if(typeof node.name==="string"&&/storefront|daily|featured|shop|section/i.test(node.name))local=node.name;
+
+        if(Array.isArray(node.entries))node.entries.forEach(x=>walk(x,local,depth+1));
+        if(Array.isArray(node.catalogEntries))node.catalogEntries.forEach(x=>walk(x,local,depth+1));
+        if(Array.isArray(node.items)){
+          node.items.forEach(function(x){addItem(x,local);});
+          addItem(node,local);
+        }
+        if(node.offerId||node.offerID||node.id||node.finalPrice!=null||node.prices||node.itemGrants){
+          addItem(node,local);
+        }
+
+        Object.keys(node).forEach(function(k){
+          if(["images","image","rarity","prices","items","entries","catalogEntries","itemGrants"].indexOf(k)>=0)return;
+          const v=node[k];
+          if(v&&typeof v==="object")walk(v,local,depth+1);
+        });
+      }
+
+      walk(root,"Boutique",0);
+
+      if(!out.length){
+        return res.status(502).json({error:"La boutique a répondu, mais son format ne contient aucun objet exploitable."});
+      }
+
+      res.setHeader("Cache-Control","public, s-maxage=82800, stale-while-revalidate=86400, stale-if-error=86400");
+      res.setHeader("X-FN-Shop-Items",String(out.length));
+      return res.status(200).json({data:out,source:key?"api-fortnite":"fortnite-api.com",fetchedAt:new Date().toISOString()});
     }catch(e){
-      return res.status(502).json({
-        error:e.name==="AbortError"?"Délai dépassé pour les sources de boutique.":(e.message||"Boutique indisponible.")
-      });
+      return res.status(502).json({error:e.name==="AbortError"?"Délai dépassé pour la boutique.":(e.message||"Boutique indisponible.")});
     }
   }
   const paths={
