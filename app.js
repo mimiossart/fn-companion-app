@@ -277,14 +277,22 @@ async function loadPlayerStats(){
   if(button){button.disabled=true;button.textContent='Chargement…'}
   try{
     var r=await fetch('/api/fortnite?type=stats&name='+encodeURIComponent(name));
-    var d=await r.json();
-    if(!r.ok)throw new Error(d.error||'Stats indisponibles');
+    var d=null;
+    try{d=await r.json()}catch(_){d={}}
+    if(!r.ok)throw new Error(d.error||('Erreur serveur '+r.status));
     FN.stats=d;
     stateStatsStore(d);
     renderProfileStats();
+    if(d.account&&d.account.displayName)FN.player=d.account.displayName;
     toast('Statistiques chargées');
-  }catch(e){toast(e.message||'Stats indisponibles')}
-  finally{button=document.getElementById('load-stats');if(button){button.disabled=false;button.textContent='↻ Charger les stats'}}
+  }catch(e){
+    var box=document.getElementById('profile-stats');
+    if(box)box.innerHTML='<div class="notice">Impossible de charger les statistiques : '+esc(e.message||'Erreur inconnue')+'</div>';
+    toast(e.message||'Stats indisponibles');
+  }finally{
+    button=document.getElementById('load-stats');
+    if(button){button.disabled=false;button.textContent='↻ Charger les stats'}
+  }
 }
 function stateStatsStore(d){
   try{localStorage.setItem('fn_stats',JSON.stringify(d))}catch(e){}
@@ -296,27 +304,31 @@ function renderProfileStats(){
   var box=document.getElementById('profile-stats');if(!box)return;
   var s=FN.stats;
   if(!s){box.innerHTML='<div class="sub">Aucune statistique chargée.</div>';return}
-  var st=s.stats||s;
-  var season=s.seasonStats||null;
-  var metricSource=season||st;
+
+  var st=s.normalized||s.stats||s;
   var progress=s.progress||null;
-  var wins=deepFind(metricSource,['wins','br_wins','brWins','br_wins_total','wins_total','victories']);
-  var kills=deepFind(metricSource,['kills','br_kills','brKills','br_kills_total','kills_total','eliminations']);
-  var deaths=deepFind(metricSource,['deaths','br_deaths','brDeaths']);
-  var matches=deepFind(metricSource,['matches','matchesPlayed','br_matches','br_matches_total','matches_total']);
-  var kd=deepFind(metricSource,['kd','kdratio','killDeathRatio','br_kd','br_kd_ratio']);
-  var winRate=deepFind(metricSource,['winRate','winrate','br_winrate','br_winrate_total','win_rate']);
+  var wins=deepFind(st,['wins','br_wins','brWins','br_wins_total','wins_total','victories']);
+  var kills=deepFind(st,['kills','br_kills','brKills','br_kills_total','kills_total','eliminations']);
+  var deaths=deepFind(st,['deaths','br_deaths','brDeaths','br_deaths_total']);
+  var matches=deepFind(st,['matches','matchesPlayed','br_matches','br_matches_total','matches_total']);
+  var kd=deepFind(st,['kd','kdratio','killDeathRatio','br_kd','br_kd_ratio']);
+  var winRate=deepFind(st,['winRate','winrate','br_winrate','br_winrate_total','win_rate']);
+  var top3=deepFind(st,['top3','br_top3','br_top3_total']);
+  var top5=deepFind(st,['top5','br_top5','br_top5_total']);
+  var top10=deepFind(st,['top10','br_top10','br_top10_total']);
   var rank=deepFind(s,['rank','displayRank','currentRank','division','tier']);
   var rankPoints=deepFind(s,['rankPoints','points','rating','rp']);
   var level=deepFind(progress,['level','currentLevel','accountLevel','seasonLevel','battlePassLevel']);
   if(level==null)level=deepFind(s,['level','currentLevel','accountLevel','seasonLevel','battlePassLevel']);
-  if(level==null)level=deepFind(s.account,['level','currentLevel','accountLevel','seasonLevel','battlePassLevel']);
   var xp=deepFind(progress,['xp','experience','currentXp','seasonXp']);
   if(xp==null)xp=deepFind(s,['xp','experience','currentXp','seasonXp']);
-  if(xp==null)xp=deepFind(s.account,['xp','experience','currentXp','seasonXp']);
-  var minutes=deepFind(st,['minutesPlayed','minutes_played']);
   function val(v){return v==null||v===''?'—':(typeof v==='number'?v.toLocaleString('fr-FR'):esc(v))}
-  box.innerHTML='<section class="grid g4"><div class="card metric"><div class="label">Victoires</div><div class="value">'+val(wins)+'</div><div class="sub">Lifetime</div></div><div class="card metric"><div class="label">K/D</div><div class="value">'+val(kd)+'</div><div class="sub">Rapport éliminations / morts</div></div><div class="card metric"><div class="label">Niveau</div><div class="value">'+val(level)+'</div><div class="sub">'+(xp!=null?'XP : '+val(xp):'Profil')+'</div></div><div class="card metric"><div class="label">Parties</div><div class="value">'+val(matches)+'</div><div class="sub">Lifetime</div></div></section><div style="height:16px"></div><section class="card"><div class="section-title">Classement</div><div class="list"><div class="row"><span>Rang</span><strong>'+val(rank)+'</strong></div><div class="row"><span>Points</span><strong>'+val(rankPoints)+'</strong></div></div></section><div style="height:16px"></div><section class="card"><div class="section-title">Détails Battle Royale</div><div class="list"><div class="row"><span>Éliminations</span><strong>'+val(kills)+'</strong></div><div class="row"><span>Morts</span><strong>'+val(deaths)+'</strong></div><div class="row"><span>Taux de victoire</span><strong>'+(winRate!=null?val(winRate)+' %':'—')+'</strong></div><div class="row"><span>Minutes jouées</span><strong>'+val(minutes)+'</strong></div></div></section>';
+  var missing=(wins==null&&kills==null&&matches==null);
+  if(missing){
+    box.innerHTML='<div class="notice">Le serveur a bien répondu, mais aucune statistique exploitable n’a été trouvée pour ce compte.<br><span class="sub">Vérifie le pseudo Epic et que le compte possède des statistiques publiques Fortnite.</span></div>';
+    return;
+  }
+  box.innerHTML='<section class="grid g4"><div class="card metric"><div class="label">Victoires</div><div class="value">'+val(wins)+'</div><div class="sub">Lifetime</div></div><div class="card metric"><div class="label">K/D</div><div class="value">'+val(kd)+'</div><div class="sub">Éliminations / morts</div></div><div class="card metric"><div class="label">Niveau</div><div class="value">'+val(level)+'</div><div class="sub">'+(xp!=null?'XP : '+val(xp):'Profil')+'</div></div><div class="card metric"><div class="label">Parties</div><div class="value">'+val(matches)+'</div><div class="sub">Lifetime</div></div></section><div style="height:16px"></div><section class="card"><div class="section-title">Classement</div><div class="list"><div class="row"><span>Rang</span><strong>'+val(rank)+'</strong></div><div class="row"><span>Points</span><strong>'+val(rankPoints)+'</strong></div></div></section><div style="height:16px"></div><section class="card"><div class="section-title">Détails Battle Royale</div><div class="list"><div class="row"><span>Éliminations</span><strong>'+val(kills)+'</strong></div><div class="row"><span>Morts</span><strong>'+val(deaths)+'</strong></div><div class="row"><span>Taux de victoire</span><strong>'+(winRate!=null?val(winRate)+' %':'—')+'</strong></div><div class="row"><span>Top 3</span><strong>'+val(top3)+'</strong></div><div class="row"><span>Top 5</span><strong>'+val(top5)+'</strong></div><div class="row"><span>Top 10</span><strong>'+val(top10)+'</strong></div></div></section>';
 }
 function profile(){
   if(!FN.stats)FN.stats=readStatsStore();
