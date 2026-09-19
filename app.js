@@ -750,9 +750,9 @@ function renderProfileStats(){
   var rank=pick(s,['rank','displayRank','currentRank','division','tier']);
   var rankPoints=pick(s,['rankPoints','points','rating','rp']);
   var level=deepFind(progress,['level','currentLevel','accountLevel','seasonLevel','battlePassLevel']);
-  if(level==null)level=deepFind(s,['level','currentLevel','accountLevel','seasonLevel','battlePassLevel']);
+  if(level==null)level=deepFind(rawForLookup,['level','currentLevel','accountLevel','seasonLevel','battlePassLevel']);
   var xp=deepFind(progress,['xp','experience','currentXp','seasonXp']);
-  if(xp==null)xp=deepFind(s,['xp','experience','currentXp','seasonXp']);
+  if(xp==null)xp=deepFind(rawForLookup,['xp','experience','currentXp','seasonXp']);
 
   var missing=(wins==null&&kills==null&&matches==null&&modeCards==='');
   if(missing){
