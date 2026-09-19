@@ -1,4 +1,15 @@
 const UPSTREAM = "https://fortnite-api.com";
+async function fetchWithTimeout(url,options,timeoutMs){
+  const controller=new AbortController();
+  const timer=setTimeout(()=>controller.abort(),timeoutMs||8000);
+  try{
+    const opts=Object.assign({},options||{},{signal:controller.signal});
+    return await fetchWithTimeout(url,opts);
+  }finally{
+    clearTimeout(timer);
+  }
+}
+
 const DATA_API = "https://prod.api-fortnite.com";
 
 async function readJson(r){
@@ -19,7 +30,7 @@ export default async function handler(req,res){
 
     const headers={"x-api-key":key};
     try{
-      const accountRes=await fetch(DATA_API+"/api/v1/account/displayName/"+encodeURIComponent(name),{headers});
+      const accountRes=await fetchWithTimeout(DATA_API+"/api/v1/account/displayName/"+encodeURIComponent(name),{headers});
       const account=await readJson(accountRes);
       if(!account.ok){
         const apiMsg=account.data&&(account.data.error||account.data.message||account.data.detail);
@@ -37,7 +48,7 @@ export default async function handler(req,res){
       if(!accountId)return res.status(502).json({error:"Le service a trouvé le compte mais n'a pas renvoyé son ID Epic."});
 
       // Endpoint documenté : récupération complète des statistiques par account ID.
-      const statsRes=await fetch(DATA_API+"/api/v2/stats/"+encodeURIComponent(accountId),{headers});
+      const statsRes=await fetchWithTimeout(DATA_API+"/api/v2/stats/"+encodeURIComponent(accountId),{headers});
       const stats=await readJson(statsRes);
       if(!stats.ok){
         const apiMsg=stats.data&&(stats.data.error||stats.data.message);
@@ -162,7 +173,7 @@ export default async function handler(req,res){
         return found;
       }
       try{
-        const seasonRes=await fetch(DATA_API+"/api/v1/profile/stats?displayName="+encodeURIComponent(name)+"&timeWindow=season",{headers});
+        const seasonRes=await fetchWithTimeout(DATA_API+"/api/v1/profile/stats?displayName="+encodeURIComponent(name)+"&timeWindow=season",{headers});
         const seasonText=await seasonRes.text();
         if(seasonRes.ok){
           let seasonJson=null;try{seasonJson=JSON.parse(seasonText)}catch(_){}
@@ -180,7 +191,7 @@ export default async function handler(req,res){
         const successful=[];
         let lastError=null;
         for(let i=0;i<candidates.length;i++){
-          const r=await fetch(candidates[i],{headers});
+          const r=await fetchWithTimeout(candidates[i],{headers});
           const text=await r.text();
           let json=null;try{json=JSON.parse(text)}catch(_){}
           if(r.ok){
@@ -197,7 +208,7 @@ export default async function handler(req,res){
         }else if(lastError)progressError=lastError;
       }catch(e){progressError={status:0,message:e.message||'Erreur réseau'}}
       try{
-        const rankedRes=await fetch(DATA_API+"/api/v1/profile/ranked?displayName="+encodeURIComponent(name),{headers});
+        const rankedRes=await fetchWithTimeout(DATA_API+"/api/v1/profile/ranked?displayName="+encodeURIComponent(name),{headers});
         const rankedText=await rankedRes.text();
         let rankedJson=null;try{rankedJson=JSON.parse(rankedText)}catch(_){}
         if(rankedRes.ok){
@@ -230,7 +241,7 @@ export default async function handler(req,res){
     if(!name)return res.status(400).json({error:"Nom de joueur manquant."});
     if(!key)return res.status(503).json({error:"FORTNITE_API_KEY n'est pas configurée dans Vercel."});
     try{
-      const accountRes=await fetch(DATA_API+"/api/v1/account/displayName/"+encodeURIComponent(name),{
+      const accountRes=await fetchWithTimeout(DATA_API+"/api/v1/account/displayName/"+encodeURIComponent(name),{
         headers:{"x-api-key":key}
       });
       const account=await readJson(accountRes);
@@ -246,7 +257,7 @@ export default async function handler(req,res){
 
       // The current API is documented as using one x-api-key for all endpoints,
       // including Pro Quests. Try the quests endpoint directly first.
-      const questRes=await fetch(DATA_API+"/api/v2/quests/"+encodeURIComponent(accountId),{
+      const questRes=await fetchWithTimeout(DATA_API+"/api/v2/quests/"+encodeURIComponent(accountId),{
         headers:{"x-api-key":key}
       });
       const body=await questRes.text();
@@ -277,7 +288,7 @@ export default async function handler(req,res){
     if(!key)return res.status(503).json({error:"FORTNITE_API_KEY n'est pas configurée dans Vercel."});
     try{
       const headers={"x-api-key":key};
-      const mapRes=await fetch(DATA_API+"/api/v1/map",{headers});
+      const mapRes=await fetchWithTimeout(DATA_API+"/api/v1/map",{headers});
       const mapText=await mapRes.text();
       if(!mapRes.ok){
         let msg=mapText;
@@ -290,7 +301,7 @@ export default async function handler(req,res){
 
       let imageUrl=null;
       try{
-        const imageRes=await fetch(DATA_API+"/api/v1/map/image",{headers,redirect:"follow"});
+        const imageRes=await fetchWithTimeout(DATA_API+"/api/v1/map/image",{headers,redirect:"follow"});
         if(imageRes.ok)imageUrl=imageRes.url;
       }catch(_){}
 
@@ -309,7 +320,7 @@ export default async function handler(req,res){
   if(type==="shop"){
     if(!key)return res.status(503).json({error:"FORTNITE_API_KEY n'est pas configurée dans Vercel."});
     try{
-      const shopRes=await fetch(DATA_API+"/api/v1/shop?lang=fr",{headers:{"x-api-key":key}});
+      const shopRes=await fetchWithTimeout(DATA_API+"/api/v1/shop?lang=fr",{headers:{"x-api-key":key}});
       const body=await shopRes.text();
       res.setHeader("Cache-Control","s-maxage=300, stale-while-revalidate=3600");
       res.status(shopRes.status).setHeader("Content-Type",shopRes.headers.get("content-type")||"application/json").send(body);
@@ -325,7 +336,7 @@ export default async function handler(req,res){
   if(!paths[type])return res.status(400).json({error:"Type inconnu."});
 
   try{
-    const r=await fetch(DATA_API+paths[type],{headers:{"x-api-key":key}});
+    const r=await fetchWithTimeout(DATA_API+paths[type],{headers:{"x-api-key":key}});
     const text=await r.text();
     let payload=null;
     try{payload=JSON.parse(text)}catch(_){ }
