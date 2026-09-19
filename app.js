@@ -183,22 +183,33 @@ async function shop(){
     }
     function parseShop(node,sectionName){
       if(node==null)return;
-      if(Array.isArray(node)){node.forEach(function(v){parseShop(v,sectionName)});return;}
+      if(Array.isArray(node)){
+        node.forEach(function(v){parseShop(v,sectionName);});
+        return;
+      }
       if(typeof node!=="object")return;
 
-      if(Array.isArray(node.sections)){
-        node.sections.forEach(function(v){parseShop(v,v&&v.name||sectionName)});
+      var localSection=sectionName;
+      if(node.name && (Array.isArray(node.entries)||Array.isArray(node.items))) localSection=String(node.name);
+
+      if(Array.isArray(node.entries)){
+        node.entries.forEach(function(v){pushOffer(v,localSection);});
       }
-      if(node.sections&&typeof node.sections==="object"&&!Array.isArray(node.sections)){
-        Object.keys(node.sections).forEach(function(k){parseShop(node.sections[k],k)});
+      if(Array.isArray(node.items)){
+        pushOffer(node,localSection);
       }
 
-      ["featured","daily","specialFeatured","specialDaily","votes","voteWinners","specialOffers"].forEach(function(k){
-        if(node[k])parseShop(node[k],(node[k]&&node[k].name)||k);
+      Object.keys(node).forEach(function(key){
+        if(key==="entries"||key==="items"||key==="images"||key==="rarity")return;
+        var child=node[key];
+        if(child&&typeof child==="object"){
+          var next=localSection;
+          if(["featured","daily","specialFeatured","specialDaily","votes","voteWinners","specialOffers","shop"].indexOf(key)>=0){
+            next=String((child&&child.name)||key);
+          }
+          parseShop(child,next);
+        }
       });
-
-      if(Array.isArray(node.entries))node.entries.forEach(function(v){pushOffer(v,sectionName||node.name)});
-      if(Array.isArray(node.items))pushOffer(node,sectionName||node.name);
     }
     parseShop(payload,"Boutique");
 
