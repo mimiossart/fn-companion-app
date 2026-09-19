@@ -206,6 +206,39 @@ export default async function handler(req,res){
     }
   }
 
+  if(type==="map"){
+    if(!key)return res.status(503).json({error:"FORTNITE_API_KEY n'est pas configurée dans Vercel."});
+    try{
+      const headers={"x-api-key":key};
+      const mapRes=await fetch(DATA_API+"/api/v1/map",{headers});
+      const mapText=await mapRes.text();
+      if(!mapRes.ok){
+        let msg=mapText;
+        try{const j=JSON.parse(mapText);msg=j.error||j.message||mapText}catch(_){}
+        return res.status(mapRes.status).json({error:String(msg).slice(0,500)});
+      }
+
+      let mapData;
+      try{mapData=JSON.parse(mapText)}catch(e){return res.status(502).json({error:"Réponse carte invalide."})}
+
+      let imageUrl=null;
+      try{
+        const imageRes=await fetch(DATA_API+"/api/v1/map/image",{headers,redirect:"follow"});
+        if(imageRes.ok)imageUrl=imageRes.url;
+      }catch(_){}
+
+      const payload=mapData&&mapData.data!==undefined?mapData.data:mapData;
+      return res.status(200).json({
+        data:payload,
+        image:imageUrl,
+        source:"api-fortnite.com",
+        fetchedAt:new Date().toISOString()
+      });
+    }catch(e){
+      return res.status(502).json({error:e.message||"Carte indisponible."});
+    }
+  }
+
   if(type==="shop"){
     if(!key)return res.status(503).json({error:"FORTNITE_API_KEY n'est pas configurée dans Vercel."});
     try{
@@ -221,7 +254,6 @@ export default async function handler(req,res){
 
   const paths={
     cosmetics:"/v2/cosmetics/br?language=fr",
-    map:"/v1/map",
     news:"/v2/news"
   };
   if(!paths[type])return res.status(400).json({error:"Type inconnu."});
