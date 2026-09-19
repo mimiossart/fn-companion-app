@@ -186,9 +186,11 @@ export default async function handler(req,res){
       }
 
       const tokenRoot=token.data&&token.data.data!==undefined?token.data.data:token.data;
-      const fortniteToken=(tokenRoot&&(
-        tokenRoot.token||tokenRoot.accessToken||tokenRoot.fortniteToken||tokenRoot["x-fortnite-token"]
-      ));
+      const fortniteToken=(typeof tokenRoot==="string"
+        ? tokenRoot
+        : tokenRoot&&(
+          tokenRoot.token||tokenRoot.accessToken||tokenRoot.fortniteToken||tokenRoot["x-fortnite-token"]
+        ));
       if(!fortniteToken){
         return res.status(502).json({error:"OAuth a répondu, mais aucun token Fortnite n'a été renvoyé."});
       }
