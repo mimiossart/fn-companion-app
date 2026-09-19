@@ -759,10 +759,13 @@ function renderProfileStats(){
 
   var rank=pick(s,['rank','displayRank','currentRank','division','tier']);
   var rankPoints=pick(s,['rankPoints','points','rating','rp']);
-  var level=deepFind(progress,['level','currentLevel','accountLevel','seasonLevel','battlePassLevel']);
-  if(level==null)level=deepFind(rawForLookup,['level','currentLevel','accountLevel','seasonLevel','battlePassLevel']);
-  var xp=deepFind(progress,['xp','experience','currentXp','seasonXp']);
-  if(xp==null)xp=deepFind(rawForLookup,['xp','experience','currentXp','seasonXp']);
+  var level=deepFind(progress,['level','currentLevel','accountLevel','seasonLevel','battlePassLevel','battlepasslevel']);
+  if(level==null)level=deepFind(progress,['value','current','progress']);
+  if(level==null)level=deepFind(rawForLookup,['level','currentLevel','accountLevel','seasonLevel','battlePassLevel','battlepasslevel']);
+  var xp=deepFind(progress,['xp','experience','currentXp','seasonXp','experiencepoints']);
+  if(xp==null)xp=deepFind(rawForLookup,['xp','experience','currentXp','seasonXp','experiencepoints']);
+  var progressNotice='';
+  if(level==null&&s.progressError){progressNotice=' · API Progress '+(s.progressError.status||'erreur');}
 
   var missing=(wins==null&&kills==null&&matches==null&&modeCards==='');
   if(missing){
@@ -773,7 +776,7 @@ function renderProfileStats(){
     return;
   }
 
-  var overall='<section class="grid g4"><div class="card metric"><div class="label">Victoires</div><div class="value">'+val(wins)+'</div><div class="sub">Tous modes</div></div><div class="card metric"><div class="label">K/D</div><div class="value">'+val(kd)+'</div><div class="sub">Tous modes</div></div><div class="card metric"><div class="label">Niveau</div><div class="value">'+val(level)+'</div><div class="sub">'+(xp!=null?'XP : '+val(xp):'Profil')+'</div></div><div class="card metric"><div class="label">Parties</div><div class="value">'+val(matches)+'</div><div class="sub">Tous modes</div></div></section>';
+  var overall='<section class="grid g4"><div class="card metric"><div class="label">Victoires</div><div class="value">'+val(wins)+'</div><div class="sub">Tous modes</div></div><div class="card metric"><div class="label">K/D</div><div class="value">'+val(kd)+'</div><div class="sub">Tous modes</div></div><div class="card metric"><div class="label">Niveau</div><div class="value">'+val(level)+'</div><div class="sub">'+(xp!=null?'XP : '+val(xp):'Profil')+progressNotice+'</div></div><div class="card metric"><div class="label">Parties</div><div class="value">'+val(matches)+'</div><div class="sub">Tous modes</div></div></section>';
 
   var details='<div style="height:16px"></div><section class="card"><div class="section-title">Statistiques générales</div><div class="list"><div class="row"><span>Éliminations</span><strong>'+val(kills)+'</strong></div><div class="row"><span>Morts</span><strong>'+val(deaths)+'</strong></div><div class="row"><span>Taux de victoire</span><strong>'+(winRate!=null?val(winRate)+' %':'—')+'</strong></div><div class="row"><span>Top 1 / Victoires</span><strong>'+val(top1)+'</strong></div><div class="row"><span>Top 3</span><strong>'+val(top3)+'</strong></div><div class="row"><span>Top 5</span><strong>'+val(top5)+'</strong></div><div class="row"><span>Top 10</span><strong>'+val(top10)+'</strong></div></div></section>';
 
