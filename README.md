@@ -9,3 +9,5 @@ Les secrets restent côté serveur. Aucun mot de passe Epic n’est demandé par
 
 
 <!-- deployment trigger 2026-09-19 -->
+
+<!-- runtime-cache-fix-2026-09-19 -->
