@@ -270,29 +270,66 @@ export default async function handler(req,res){
     }
   }
   if(type==="shop"){
-    const cacheHeader="public, s-maxage=82800, stale-while-revalidate=86400, stale-if-error=86400";
     try{
-      if(key){
+      const sources=[];
+      if(key)sources.push({url:DATA_API+"/api/v1/shop?lang=fr",headers:{"x-api-key":key,"accept":"application/json"}});
+      sources.push({url:"https://fortnite-api.com/v2/shop?language=fr",headers:{"accept":"application/json"}});
+      sources.push({url:"https://fortnite-api.com/v2/shop/br?language=fr",headers:{"accept":"application/json"}});
+
+      let sourceJson=null;
+      for(let i=0;i<sources.length;i++){
         try{
-          const r=await fetchWithTimeout(DATA_API+"/api/v1/shop?lang=fr",{headers:{"x-api-key":key,"accept":"application/json"}},4500);
-          const body=await r.text();
+          const r=await fetchWithTimeout(sources[i].url,{headers:sources[i].headers},5000);
+          const text=await r.text();
           if(r.ok){
-            res.setHeader("Cache-Control",cacheHeader);
-            res.setHeader("X-FN-Shop-Source","api-fortnite");
-            res.setHeader("Content-Type",r.headers.get("content-type")||"application/json");
-            return res.status(200).send(body);
+            try{sourceJson=JSON.parse(text)}catch(_){sourceJson=null}
+            if(sourceJson)break;
           }
         }catch(_){}
       }
-      const r=await fetchWithTimeout("https://fortnite-api.com/v2/shop/br?language=fr",{headers:{"accept":"application/json"}},4500);
-      const body=await r.text();
-      if(!r.ok){
-        return res.status(r.status>=500?502:r.status).json({error:"La source de boutique de secours est indisponible.",upstreamStatus:r.status});
+      if(!sourceJson)return res.status(502).json({error:"La boutique Fortnite est temporairement indisponible."});
+
+      const root=sourceJson&&sourceJson.data!==undefined?sourceJson.data:sourceJson;
+      const out=[],seen={};
+      function addOffer(entry,section){
+        if(!entry||typeof entry!=="object")return;
+        const items=Array.isArray(entry.items)?entry.items:[];
+        const price=entry.finalPrice!=null?entry.finalPrice:(entry.price!=null?entry.price:null);
+        const offerId=entry.offerId||entry.id||"";
+        if(items.length){
+          items.forEach(function(it){
+            if(!it||typeof it!=="object")return;
+            const name=it.name||it.displayName||it.title||"Objet Fortnite";
+            const k=(offerId||name)+"|"+String(price);
+            if(seen[k])return;seen[k]=true;
+            out.push({
+              name:name,
+              image:(it.images&&(it.images.featured||it.images.icon||it.images.smallIcon))||it.image||"",
+              rarity:(it.rarity&&(it.rarity.displayValue||it.rarity.value))||it.rarity||"",
+              price:price,
+              section:section||"Boutique",
+              offerId:offerId,
+              itemCount:items.length
+            });
+          });
+        }else{
+          const name=entry.name||entry.displayName||entry.title||entry.devName;
+          if(name){
+            const k=(offerId||name)+"|"+String(price);
+            if(!seen[k]){seen[k]=true;out.push({name:name,image:(entry.images&&(entry.images.featured||entry.images.icon))||"",rarity:entry.rarity||"",price:price,section:section||"Boutique",offerId:offerId,itemCount:1});}
+          }
+        }
       }
-      res.setHeader("Cache-Control",cacheHeader);
-      res.setHeader("X-FN-Shop-Source","fortnite-api.com");
-      res.setHeader("Content-Type",r.headers.get("content-type")||"application/json");
-      return res.status(200).send(body);
+      ["featured","daily","specialFeatured","specialDaily","votes","voteWinners"].forEach(function(section){
+        const block=root&&root[section];
+        const entries=block&&Array.isArray(block.entries)?block.entries:[];
+        entries.forEach(function(entry){addOffer(entry,block.name||section);});
+      });
+      if(root&&Array.isArray(root.entries))root.entries.forEach(function(entry){addOffer(entry,"Boutique");});
+
+      if(!out.length)return res.status(502).json({error:"La source boutique n'a retourné aucune offre exploitable."});
+      res.setHeader("Cache-Control","public, s-maxage=82800, stale-while-revalidate=86400, stale-if-error=86400");
+      return res.status(200).json({data:out,source:"normalized-shop",fetchedAt:new Date().toISOString()});
     }catch(e){
       return res.status(502).json({error:e.name==="AbortError"?"Délai dépassé pour la boutique.":(e.message||"Boutique indisponible.")});
     }
@@ -303,34 +340,22 @@ export default async function handler(req,res){
   if(!paths[type])return res.status(400).json({error:"Type inconnu."});
 
   try{
-    const headers={"x-api-key":key};
-    let payload=null;
-
-    if(key){
+    const sources=[];
+    if(key)sources.push({url:DATA_API+paths[type],headers:{"x-api-key":key,"accept":"application/json"}});
+    sources.push({url:"https://fortnite-api.com/v2/cosmetics/br?language=fr",headers:{"accept":"application/json"}});
+    let items=null;
+    for(let i=0;i<sources.length;i++){
       try{
-        const r=await fetchWithTimeout(DATA_API+paths[type],{headers},5000);
+        const r=await fetchWithTimeout(sources[i].url,{headers:sources[i].headers},6000);
         const text=await r.text();
-        if(r.ok){
-          try{payload=JSON.parse(text)}catch(_){}
-        }
+        if(!r.ok)continue;
+        let payload=null;try{payload=JSON.parse(text)}catch(_){continue}
+        const data=payload&&payload.data!==undefined?payload.data:payload;
+        if(Array.isArray(data)){items=data;break}
+        if(data&&Array.isArray(data.items)){items=data.items;break}
       }catch(_){}
     }
-
-    if(!payload){
-      const r=await fetchWithTimeout("https://fortnite-api.com/v2/cosmetics?language=fr",{headers:{"accept":"application/json"}},5000);
-      const text=await r.text();
-      if(!r.ok){
-        return res.status(r.status>=500?502:r.status).json({error:"Le catalogue des skins est temporairement indisponible.",upstreamStatus:r.status});
-      }
-      try{payload=JSON.parse(text)}catch(_){}
-    }
-
-    if(!payload)return res.status(502).json({error:"Réponse skins invalide."});
-
-    const data=payload&&payload.data!==undefined?payload.data:payload;
-    const items=Array.isArray(data)?data:(data&&Array.isArray(data.items)?data.items:[]);
-    if(!items.length)return res.status(502).json({error:"Le catalogue skins a répondu sans objets."});
-
+    if(!items||!items.length)return res.status(502).json({error:"Le catalogue des skins est temporairement indisponible."});
     res.setHeader("Cache-Control","public, s-maxage=21600, stale-while-revalidate=86400, stale-if-error=86400");
     return res.status(200).json(items);
   }catch(e){
