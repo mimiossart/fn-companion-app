@@ -197,6 +197,8 @@ async function shop(){
       }
       if(Array.isArray(node.items)){
         pushOffer(node,localSection);
+      } else {
+        pushOffer(node,localSection);
       }
 
       Object.keys(node).forEach(function(key){
