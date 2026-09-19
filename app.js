@@ -399,9 +399,10 @@ function renderProfileStats(){
   var matches=pick(st,['matches','matchesPlayed','br_matches','br_matches_total','br_matchesplayed','matches_total']);
   var kd=pick(st,['kd','kdratio','killDeathRatio','br_kd','br_kd_ratio']);
   var winRate=pick(st,['winRate','winrate','br_winrate','br_winrate_total','win_rate']);
-  var top3=pick(st,['top3','br_top3','br_top3_total','br_placetop3']);
-  var top5=pick(st,['top5','br_top5','br_top5_total','br_placetop5']);
-  var top10=pick(st,['top10','br_top10','br_top10_total','br_placetop10']);
+  var top1=pick(st,['top1','br_placetop1','placetop1','wins','br_wins_total']);
+  var top3=pick(st,['top3','br_placetop3','placetop3']);
+  var top5=pick(st,['top5','br_placetop5','placetop5']);
+  var top10=pick(st,['top10','br_placetop10','placetop10']);
   var rank=pick(s,['rank','displayRank','currentRank','division','tier']);
   var rankPoints=pick(s,['rankPoints','points','rating','rp']);
   var level=deepFind(progress,['level','currentLevel','accountLevel','seasonLevel','battlePassLevel']);
@@ -420,7 +421,7 @@ function renderProfileStats(){
 
   var overall='<section class="grid g4"><div class="card metric"><div class="label">Victoires</div><div class="value">'+val(wins)+'</div><div class="sub">Tous modes</div></div><div class="card metric"><div class="label">K/D</div><div class="value">'+val(kd)+'</div><div class="sub">Tous modes</div></div><div class="card metric"><div class="label">Niveau</div><div class="value">'+val(level)+'</div><div class="sub">'+(xp!=null?'XP : '+val(xp):'Profil')+'</div></div><div class="card metric"><div class="label">Parties</div><div class="value">'+val(matches)+'</div><div class="sub">Tous modes</div></div></section>';
 
-  var details='<div style="height:16px"></div><section class="card"><div class="section-title">Statistiques générales</div><div class="list"><div class="row"><span>Éliminations</span><strong>'+val(kills)+'</strong></div><div class="row"><span>Morts</span><strong>'+val(deaths)+'</strong></div><div class="row"><span>Taux de victoire</span><strong>'+(winRate!=null?val(winRate)+' %':'—')+'</strong></div><div class="row"><span>Top 3</span><strong>'+val(top3)+'</strong></div><div class="row"><span>Top 5</span><strong>'+val(top5)+'</strong></div><div class="row"><span>Top 10</span><strong>'+val(top10)+'</strong></div></div></section>';
+  var details='<div style="height:16px"></div><section class="card"><div class="section-title">Statistiques générales</div><div class="list"><div class="row"><span>Éliminations</span><strong>'+val(kills)+'</strong></div><div class="row"><span>Morts</span><strong>'+val(deaths)+'</strong></div><div class="row"><span>Taux de victoire</span><strong>'+(winRate!=null?val(winRate)+' %':'—')+'</strong></div><div class="row"><span>Top 1 / Victoires</span><strong>'+val(top1)+'</strong></div><div class="row"><span>Top 3</span><strong>'+val(top3)+'</strong></div><div class="row"><span>Top 5</span><strong>'+val(top5)+'</strong></div><div class="row"><span>Top 10</span><strong>'+val(top10)+'</strong></div></div></section>';
 
   var ranking='<div style="height:16px"></div><section class="card"><div class="section-title">Classement</div><div class="list"><div class="row"><span>Rang</span><strong>'+val(rank)+'</strong></div><div class="row"><span>Points</span><strong>'+val(rankPoints)+'</strong></div></div></section>';
 
