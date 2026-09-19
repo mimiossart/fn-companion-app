@@ -139,14 +139,13 @@ export default async function handler(req,res){
 
       function findNumericByPattern(obj,patterns){
         let found=null;
-        const wanted=patterns.map(function(p){return normalizeKey(p)});
-        function normalizeKey(v){return String(v||"").toLowerCase().replace(/[^a-z0-9]/g,"")}
+        const wanted=patterns.map(function(p){return String(p||"").toLowerCase().replace(/[^a-z0-9]/g,"")});
         function walk(node){
           if(found!=null||node==null||typeof node!=="object")return;
           if(Array.isArray(node)){node.forEach(walk);return}
           Object.keys(node).forEach(function(key){
             if(found!=null)return;
-            const nk=normalizeKey(key);
+            const nk=String(key||"").toLowerCase().replace(/[^a-z0-9]/g,"");
             if(wanted.some(function(p){return nk===p||nk.indexOf(p)>=0})){
               let v=node[key];
               if(v&&typeof v==="object"){
@@ -160,6 +159,7 @@ export default async function handler(req,res){
         walk(obj);
         return found;
       }
+
       try{
         const seasonRes=await fetch(DATA_API+"/api/v1/profile/stats?displayName="+encodeURIComponent(name)+"&timeWindow=season",{headers});
         const seasonText=await seasonRes.text();
@@ -168,33 +168,21 @@ export default async function handler(req,res){
           seasonStats=seasonJson&&seasonJson.data!==undefined?seasonJson.data:seasonJson;
         }
       }catch(_){}
+
+      // Endpoint Pro documenté pour le niveau/XP du profil.
       try{
-        const candidates=[
-          DATA_API+"/api/v1/profile/level?displayName="+encodeURIComponent(name),
-          DATA_API+"/api/v1/profile/progress?displayName="+encodeURIComponent(name),
-          DATA_API+"/api/v1/profile/level/"+encodeURIComponent(accountId),
-          DATA_API+"/api/v1/profile/progress?accountId="+encodeURIComponent(accountId),
-          DATA_API+"/api/v1/profile/progress/"+encodeURIComponent(accountId)
-        ];
-        const successful=[];
-        let lastError=null;
-        for(let i=0;i<candidates.length;i++){
-          const r=await fetch(candidates[i],{headers});
-          const text=await r.text();
-          let json=null;try{json=JSON.parse(text)}catch(_){}
-          if(r.ok){
-            const payload=json&&json.data!==undefined?json.data:json;
-            if(payload!=null)successful.push(payload);
-          }else{
-            lastError={status:r.status,message:(json&&(json.error||json.message))||text.slice(0,500),url:candidates[i]};
-          }
+        const progressRes=await fetch(DATA_API+"/api/v1/profile/progress?displayName="+encodeURIComponent(name),{headers});
+        const progressText=await progressRes.text();
+        let progressJson=null;try{progressJson=JSON.parse(progressText)}catch(_){}
+        if(progressRes.ok){
+          progress=progressJson&&progressJson.data!==undefined?progressJson.data:progressJson;
+          progressNormalized.level=findNumericByPattern(progress,["level","currentLevel","accountLevel","seasonLevel","profileLevel","battlePassLevel"]);
+          progressNormalized.xp=findNumericByPattern(progress,["xp","experience","currentXp","seasonXp","experiencePoints","totalXp"]);
+        }else{
+          progressError={status:progressRes.status,message:(progressJson&&(progressJson.error||progressJson.message))||progressText.slice(0,500)};
         }
-        if(successful.length){
-          progress=successful;
-          progressNormalized.level=findNumericByPattern(successful,["level","currentLevel","accountLevel","seasonLevel","profileLevel"]);
-          progressNormalized.xp=findNumericByPattern(successful,["xp","experience","currentXp","seasonXp","experiencePoints","totalXp"]);
-        }else if(lastError)progressError=lastError;
-      }catch(e){progressError={status:0,message:e.message||'Erreur réseau'}}
+      }catch(e){progressError={status:0,message:e.message||"Erreur réseau"}}
+
       try{
         const rankedRes=await fetch(DATA_API+"/api/v1/profile/ranked?displayName="+encodeURIComponent(name),{headers});
         const rankedText=await rankedRes.text();
