@@ -55,6 +55,7 @@ async function readJson(r){
 export default async function handler(req,res){
   const type=(req.query&&req.query.type)||"cosmetics";
   const name=((req.query&&req.query.name)||"").trim();
+  const requestedAccountId=((req.query&&req.query.accountId)||"").trim();
   const key=process.env.FORTNITE_API_KEY||"";
   const fortniteToken=process.env.FORTNITE_TOKEN||"";
 
@@ -64,22 +65,26 @@ export default async function handler(req,res){
 
     const headers={"x-api-key":key};
     try{
-      const accountRes=await fetchWithTimeout(DATA_API+"/api/v1/account/displayName/"+encodeURIComponent(name),{headers},5000,{module:"stats",source:"account"});
-      const account=await readJson(accountRes);
-      if(!account.ok){
-        const apiMsg=account.data&&(account.data.error||account.data.message||account.data.detail);
-        return res.status(account.status).json({
-          error:apiMsg||("Impossible de trouver le joueur \""+name+"\"."),
-          upstreamStatus:account.status,
-          upstreamResponse:account.raw?account.raw.slice(0,500):""
-        });
+      let accountData=null;
+      let accountId=requestedAccountId||"";
+      if(!accountId){
+        const accountRes=await fetchWithTimeout(DATA_API+"/api/v1/account/displayName/"+encodeURIComponent(name),{headers},5000,{module:"stats",source:"account"});
+        const account=await readJson(accountRes);
+        if(!account.ok){
+          const apiMsg=account.data&&(account.data.error||account.data.message||account.data.detail);
+          return res.status(account.status).json({
+            error:apiMsg||("Impossible de trouver le joueur \""+name+"\"."),
+            upstreamStatus:account.status,
+            upstreamResponse:account.raw?account.raw.slice(0,500):""
+          });
+        }
+        const accountRoot=account.data&&account.data.data!==undefined?account.data.data:account.data;
+        accountData=accountRoot&&accountRoot.account?accountRoot.account:accountRoot;
+        accountId=(accountData&&(accountData.id||accountData.accountId))
+          ||(accountRoot&&(accountRoot.id||accountRoot.accountId));
       }
-
-      const accountRoot=account.data&&account.data.data!==undefined?account.data.data:account.data;
-      const accountData=accountRoot&&accountRoot.account?accountRoot.account:accountRoot;
-      const accountId=(accountData&&(accountData.id||accountData.accountId))
-        ||(accountRoot&&(accountRoot.id||accountRoot.accountId));
-      if(!accountId)return res.status(502).json({error:"Le service a trouvé le compte mais n'a pas renvoyé son ID Epic."});
+      if(!accountId)return res.status(502).json({error:"ID Epic manquant pour récupérer les statistiques."});
+      if(!accountData)accountData={id:accountId,displayName:name};
 
       // Endpoint documenté : récupération complète des statistiques par account ID.
       const statsRes=await fetchWithTimeout(DATA_API+"/api/v2/stats/"+encodeURIComponent(accountId),{headers},7000,{module:"stats",source:"stats"});
