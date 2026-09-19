@@ -253,17 +253,24 @@ export default async function handler(req,res){
   }
 
   const paths={
-    cosmetics:"/v2/cosmetics/br?language=fr",
-    news:"/v2/news"
+    cosmetics:"/api/v2/cosmetics/all?page=1&pageSize=60&lang=fr"
   };
   if(!paths[type])return res.status(400).json({error:"Type inconnu."});
 
   try{
-    const r=await fetch(UPSTREAM+paths[type]);
+    const r=await fetch(DATA_API+paths[type],{headers:{"x-api-key":key}});
     const text=await r.text();
-    res.setHeader("Cache-Control","s-maxage=120, stale-while-revalidate=600");
-    res.status(r.status).setHeader("Content-Type",r.headers.get("content-type")||"application/json").send(text);
+    let payload=null;
+    try{payload=JSON.parse(text)}catch(_){ }
+    if(!r.ok){
+      const msg=payload&&(payload.error||payload.message);
+      return res.status(r.status).json({error:msg||("Erreur API cosmetics : "+r.status)});
+    }
+    const data=payload&&payload.data!==undefined?payload.data:payload;
+    const items=Array.isArray(data)?data:(data&&Array.isArray(data.items)?data.items:[]);
+    res.setHeader("Cache-Control","s-maxage=600, stale-while-revalidate=3600");
+    return res.status(200).json(items);
   }catch(e){
-    res.status(502).json({error:e.message||"API indisponible"});
+    return res.status(502).json({error:e.message||"API cosmetics indisponible"});
   }
 }
