@@ -141,23 +141,25 @@ export default async function handler(req,res){
         }
       }catch(_){}
       try{
-        // Profile level is exposed as its own Pro endpoint.
-        const levelRes=await fetch(DATA_API+"/api/v1/profile/level?displayName="+encodeURIComponent(name),{headers});
-        const levelText=await levelRes.text();
-        let levelJson=null;try{levelJson=JSON.parse(levelText)}catch(_){}
-        if(levelRes.ok){
-          progress=levelJson&&levelJson.data!==undefined?levelJson.data:levelJson;
-        }else{
-          // Fallback to the documented progress endpoint.
-          const progressRes=await fetch(DATA_API+"/api/v1/profile/progress?displayName="+encodeURIComponent(name),{headers});
-          const progressText=await progressRes.text();
-          let progressJson=null;try{progressJson=JSON.parse(progressText)}catch(_){}
-          if(progressRes.ok){
-            progress=progressJson&&progressJson.data!==undefined?progressJson.data:progressJson;
-          }else{
-            progressError={status:progressRes.status,message:(progressJson&&(progressJson.error||progressJson.message))||progressText.slice(0,500)};
+        const candidates=[
+          DATA_API+"/api/v1/profile/level?displayName="+encodeURIComponent(name),
+          DATA_API+"/api/v1/profile/level/"+encodeURIComponent(accountId),
+          DATA_API+"/api/v1/profile/progress?displayName="+encodeURIComponent(name),
+          DATA_API+"/api/v1/profile/progress?accountId="+encodeURIComponent(accountId),
+          DATA_API+"/api/v1/profile/progress/"+encodeURIComponent(accountId)
+        ];
+        let lastError=null;
+        for(let i=0;i<candidates.length;i++){
+          const r=await fetch(candidates[i],{headers});
+          const text=await r.text();
+          let json=null;try{json=JSON.parse(text)}catch(_){}
+          if(r.ok){
+            progress=json&&json.data!==undefined?json.data:json;
+            break;
           }
+          lastError={status:r.status,message:(json&&(json.error||json.message))||text.slice(0,500),url:candidates[i]};
         }
+        if(progress==null&&lastError)progressError=lastError;
       }catch(e){progressError={status:0,message:e.message||'Erreur réseau'}}
       try{
         const rankedRes=await fetch(DATA_API+"/api/v1/profile/ranked?displayName="+encodeURIComponent(name),{headers});
