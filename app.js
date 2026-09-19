@@ -35,6 +35,17 @@ function saveLocal(){
     localStorage.setItem("fn_favorites",JSON.stringify(FN.favorites||[]));
   }catch(e){}
 }
+function cacheModule(key,value){
+  try{localStorage.setItem("fn_cache_"+key,JSON.stringify({savedAt:Date.now(),value:value}))}catch(e){}
+}
+function getModuleCache(key){
+  try{
+    var raw=localStorage.getItem("fn_cache_"+key);
+    if(!raw)return null;
+    var item=JSON.parse(raw);
+    return item&&item.value!=null?item.value:null;
+  }catch(e){return null}
+}
 
 function loadLocal(){
   try{
@@ -406,9 +417,16 @@ async function loadCosmetics(){
     if(!r.ok)throw new Error(d.error||"API indisponible");
     var data=d.data||d;
     FN.cosmetics=Array.isArray(data)?data:[];
+    cacheModule("cosmetics",FN.cosmetics);
   }catch(e){
-    toast("Skins indisponibles pour le moment");
-    FN.cosmetics=[];
+    var cached=getModuleCache("cosmetics");
+    if(Array.isArray(cached)&&cached.length){
+      FN.cosmetics=cached;
+      toast("Skins : dernières données disponibles");
+    }else{
+      toast("Skins indisponibles pour le moment");
+      FN.cosmetics=[];
+    }
   }
 }
 
@@ -445,10 +463,18 @@ function favoriteSkin(id){
 async function shop(){
   layout('<section class="hero compact-hero"><div class="eyebrow">BOUTIQUE</div><h2>Boutique Fortnite actuelle</h2><p>Les offres sont récupérées au moment de l’ouverture.</p></section><div id="fn-shop" class="grid g3"><div class="card"><div class="sub">Chargement…</div></div></div>');
   try{
-    var r=await fetch("/api/fortnite?type=shop");
-    var text=await r.text();
-    var d=null;try{d=JSON.parse(text)}catch(_){throw new Error((text||"Réponse serveur invalide").replace(/\s+/g," ").slice(0,300))}
-    if(!r.ok)throw new Error(d.error||"Boutique indisponible");
+    var d=null;
+    try{
+      var r=await fetch("/api/fortnite?type=shop");
+      var text=await r.text();
+      try{d=JSON.parse(text)}catch(_){throw new Error((text||"Réponse serveur invalide").replace(/\s+/g," ").slice(0,300))}
+      if(!r.ok)throw new Error(d.error||"Boutique indisponible");
+      cacheModule("shop",d);
+    }catch(fetchError){
+      d=getModuleCache("shop");
+      if(!d)throw fetchError;
+      toast("Boutique : dernières données disponibles");
+    }
     var payload=d&&d.data?d.data:d;
     var entries=[];
     function pushOffer(entry,sectionName){
@@ -539,10 +565,18 @@ async function shop(){
 async function mapPage(){
   layout('<div class="toolbar"><span class="tag">Carte Fortnite</span><span id="fn-map-status" class="sub">Chargement…</span></div><div id="fn-map" class="map"><div class="map-loading">Chargement de la carte…</div></div>');
   try{
-    var r=await fetch("/api/fortnite?type=map");
-    var text=await r.text();
-    var d=null;try{d=JSON.parse(text)}catch(_){throw new Error((text||"Réponse serveur invalide").replace(/\s+/g," ").slice(0,300))}
-    if(!r.ok)throw new Error(d.error||"Carte indisponible");
+    var d=null;
+    try{
+      var r=await fetch("/api/fortnite?type=map");
+      var text=await r.text();
+      try{d=JSON.parse(text)}catch(_){throw new Error((text||"Réponse serveur invalide").replace(/\s+/g," ").slice(0,300))}
+      if(!r.ok)throw new Error(d.error||"Carte indisponible");
+      cacheModule("map",d);
+    }catch(fetchError){
+      d=getModuleCache("map");
+      if(!d)throw fetchError;
+      toast("Carte : dernières données disponibles");
+    }
     FN.map=d;
 
     var payload=d&&d.data!==undefined?d.data:d;
