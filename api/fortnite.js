@@ -61,13 +61,15 @@ export default async function handler(req,res){
 
   if(type==="friends") {
     const accountId=((req.query&&req.query.accountId)||"").trim();
-    const oauthToken=((req.headers&&((req.headers.authorization||"")||req.headers["x-fortnite-token"]))||"").trim();
+    const oauthToken=((req.headers&&req.headers["x-fortnite-token"])||"").trim();
     if(!accountId)return res.status(400).json({error:"accountId manquant."});
     if(!oauthToken)return res.status(401).json({error:"Jeton OAuth utilisateur manquant."});
     if(!key)return res.status(503).json({error:"FORTNITE_API_KEY n'est pas configurée dans Vercel."});
 
-    const authHeader=/^bearer\s+/i.test(oauthToken)?oauthToken:"Bearer "+oauthToken;
-    const headers={"x-api-key":key,"Authorization":authHeader,"x-fortnite-token":oauthToken.replace(/^Bearer\s+/i,""),"accept":"application/json"};
+    // Social endpoints expect the user's Epic OAuth token in x-fortnite-token.
+    // Do not also send it as Authorization/Bearer to avoid auth-scheme conflicts.
+    const userToken=oauthToken.replace(/^Bearer\\s+/i,"").trim();
+    const headers={"x-api-key":key,"x-fortnite-token":userToken,"accept":"application/json"};
     const base=DATA_API+"/api/v1/friends/"+encodeURIComponent(accountId);
     try{
       const [summaryRes,friendsRes]=await Promise.all([
