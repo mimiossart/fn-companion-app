@@ -59,6 +59,43 @@ export default async function handler(req,res){
   const key=process.env.FORTNITE_API_KEY||"";
   const fortniteToken=process.env.FORTNITE_TOKEN||"";
 
+  if(type==="friends") {
+    const accountId=((req.query&&req.query.accountId)||"").trim();
+    const oauthToken=((req.headers&&((req.headers.authorization||"")||req.headers["x-fortnite-token"]))||"").trim();
+    if(!accountId)return res.status(400).json({error:"accountId manquant."});
+    if(!oauthToken)return res.status(401).json({error:"Jeton OAuth utilisateur manquant."});
+    if(!key)return res.status(503).json({error:"FORTNITE_API_KEY n'est pas configurée dans Vercel."});
+
+    const authHeader=/^bearer\s+/i.test(oauthToken)?oauthToken:"Bearer "+oauthToken;
+    const headers={"x-api-key":key,"Authorization":authHeader,"x-fortnite-token":oauthToken.replace(/^Bearer\s+/i,""),"accept":"application/json"};
+    const base=DATA_API+"/api/v1/friends/"+encodeURIComponent(accountId);
+    try{
+      const [summaryRes,friendsRes]=await Promise.all([
+        fetchWithTimeout(base+"/summary",{headers},8000,{module:"friends",source:"summary"}),
+        fetchWithTimeout(base+"/friends",{headers},8000,{module:"friends",source:"friends"})
+      ]);
+      const summary=await readJson(summaryRes);
+      const friends=await readJson(friendsRes);
+
+      if(!summary.ok && !friends.ok){
+        const detail=summary.data&&(summary.data.error||summary.data.message)||friends.data&&(friends.data.error||friends.data.message);
+        return res.status(summary.status||friends.status||502).json({error:detail||"Impossible de charger les données sociales Fortnite.",summaryStatus:summary.status,friendsStatus:friends.status});
+      }
+
+      res.setHeader("Cache-Control","private, no-store");
+      return res.status(200).json({
+        ok:true,
+        accountId:accountId,
+        summary:summary.data,
+        friends:friends.data,
+        summaryStatus:summary.status,
+        friendsStatus:friends.status
+      });
+    }catch(e){
+      return res.status(502).json({error:e.name==="AbortError"?"Le service social Fortnite a dépassé le délai de réponse.":(e.message||"Amis & vie sociale indisponible.")});
+    }
+  }
+
   if(type==="stats"){
     if(!name&&!requestedAccountId)return res.status(400).json({error:"Nom de joueur ou ID Epic manquant."});
     if(!key)return res.status(503).json({error:"FORTNITE_API_KEY n'est pas configurée dans Vercel."});
