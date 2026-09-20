@@ -19,7 +19,8 @@ var ROUTES={
   shop:["Boutique","🛒"],
   profile:["Profil","◉"],
   tournaments:["Tournois","🏆"],
-  live:["Live","↗"]
+  live:["Live","↗"],
+  friends:["Amis & social","👥"]
 };
 
 function esc(v){
@@ -903,6 +904,82 @@ function profile(){
   layout('<section class="card profile"><div class="avatar">'+(FN.favorites[0]&&FN.favorites[0].image?'<img src="'+esc(FN.favorites[0].image)+'" alt="">':'🎮')+'</div><div><div class="eyebrow">PROFIL FORTNITE</div><h2>'+((FN.player&&esc(FN.player))||'Mon profil')+'</h2><p class="sub">Entre ton pseudo Epic puis utilise le bouton de synchronisation. La clé API reste sur Vercel et n’est jamais envoyée au navigateur.</p><div class="toolbar"><input id="fn-player" class="search" placeholder="Pseudo Epic" value="'+esc(FN.player)+'"><button class="btn primary" onclick="savePlayer()">Enregistrer</button><button id="load-stats" class="btn" onclick="loadPlayerStats()">↻ Charger les stats</button></div></div></section><div style="height:16px"></div><div id="profile-stats"></div><div style="height:16px"></div><div class="card"><div class="section-title">Mes favoris</div><div class="grid g3">'+(FN.favorites.length?FN.favorites.slice(0,9).map(function(f){return '<div class="row item"><div class="mini-img">'+(f.image?'<img src="'+esc(f.image)+'" alt="">':'✨')+'</div><strong>'+esc(f.name)+'</strong></div>'}).join(''):'<div class="sub">Aucun favori.</div>')+'</div></div>');
   renderProfileStats();
 }
+function friends(){
+  var stored=FN.stats&&FN.stats.accountId?FN.stats.accountId:"";
+  layout('<section class="hero compact-hero"><div class="eyebrow">AMIS & VIE SOCIALE</div><h2>Amis Fortnite</h2><p>Listes d’amis, demandes entrantes/sortantes, amis communs, blocage et suggestions.</p></section>'+
+    '<section class="card"><div class="section-title">Connexion OAuth</div><p class="sub">Le jeton OAuth est utilisé uniquement pour la requête serveur et n’est pas enregistré dans le navigateur.</p>'+
+    '<div class="toolbar"><input id="friends-account" class="search" placeholder="Account ID Epic" value="'+esc(stored)+'">'+
+    '<input id="friends-token" class="search" type="password" autocomplete="off" placeholder="Jeton OAuth utilisateur">'+
+    '<button class="btn primary" id="friends-load" onclick="loadFriends()">Charger</button></div>'+
+    '<div id="friends-msg" class="sub" style="margin-top:10px"></div></section>'+
+    '<div style="height:16px"></div><div id="friends-result"></div>');
+}
+
+function friendsPick(obj){
+  if(!obj||typeof obj!=="object")return [];
+  var candidates=[obj.data,obj.friends,obj.items,obj.entries,obj.results,obj.users,obj.accounts];
+  for(var i=0;i<candidates.length;i++)if(Array.isArray(candidates[i]))return candidates[i];
+  return Array.isArray(obj)?obj:[];
+}
+
+function friendsName(x){
+  if(!x||typeof x!=="object")return "Compte Fortnite";
+  return x.displayName||x.display_name||x.name||x.accountName||x.accountId||x.id||"Compte Fortnite";
+}
+
+function friendsSection(title,data){
+  var arr=friendsPick(data);
+  if(!arr.length)return '<div class="card"><div class="section-title">'+esc(title)+'</div><div class="sub">Aucune donnée.</div></div>';
+  return '<div class="card"><div class="section-title">'+esc(title)+' <span class="tag">'+arr.length+'</span></div><div class="list">'+arr.slice(0,200).map(function(x){
+    var status=x.status||x.friendshipStatus||x.state||"";
+    return '<div class="row"><div><strong>'+esc(friendsName(x))+'</strong><div class="sub">'+esc(x.accountId||x.id||"")+'</div></div>'+(status?'<span class="tag">'+esc(status)+'</span>':"")+'</div>';
+  }).join('')+'</div></div>';
+}
+
+async function loadFriends(){
+  var account=document.getElementById("friends-account");
+  var token=document.getElementById("friends-token");
+  var msg=document.getElementById("friends-msg");
+  var box=document.getElementById("friends-result");
+  var button=document.getElementById("friends-load");
+  var accountId=account&&account.value.trim();
+  var oauth=token&&token.value.trim();
+  if(!accountId){if(msg)msg.textContent="Indique ton Account ID Epic.";return}
+  if(!oauth){if(msg)msg.textContent="Indique ton jeton OAuth utilisateur.";return}
+  if(button){button.disabled=true;button.textContent="Chargement…"}
+  if(box)box.innerHTML='<div class="card"><div class="sub">Récupération des données sociales…</div></div>';
+  try{
+    var r=await fetch("/api/fortnite?type=friends&accountId="+encodeURIComponent(accountId),{
+      headers:{Authorization:/^Bearer\s/i.test(oauth)?oauth:"Bearer "+oauth}
+    });
+    var text=await r.text(),d=null;try{d=JSON.parse(text)}catch(_){d=null}
+    if(!r.ok)throw new Error((d&&d.error)||("Erreur serveur "+r.status));
+    var summary=d&&d.summary&&d.summary.data!==undefined?d.summary.data:(d?d.summary:null);
+    var friendsData=d&&d.friends&&d.friends.data!==undefined?d.friends.data:(d?d.friends:null);
+    var incoming=summary&&(summary.incomingRequests||summary.incoming||summary.pendingIncoming||summary.receivedRequests);
+    var outgoing=summary&&(summary.outgoingRequests||summary.outgoing||summary.pendingOutgoing||summary.sentRequests);
+    var mutual=summary&&(summary.mutualFriends||summary.mutual||summary.commonFriends);
+    var blocked=summary&&(summary.blocked||summary.blockedFriends||summary.blocklist);
+    var suggested=summary&&(summary.suggestedFriends||summary.suggestions||summary.recommendations);
+    var sections='';
+    if(incoming)sections+=friendsSection("Demandes entrantes",incoming);
+    if(outgoing)sections+=friendsSection("Demandes sortantes",outgoing);
+    if(mutual)sections+=friendsSection("Amis communs",mutual);
+    if(blocked)sections+=friendsSection("Liste de blocage",blocked);
+    if(suggested)sections+=friendsSection("Amis suggérés",suggested);
+    sections+=friendsSection("Liste d’amis",friendsData);
+    if(!sections)sections='<div class="notice">Le service a répondu, mais aucun format de liste reconnu n’a été retourné.</div>';
+    if(box)box.innerHTML='<div class="grid g2">'+sections+'</div>';
+    if(msg)msg.textContent="Données sociales chargées.";
+    if(token)token.value="";
+  }catch(e){
+    if(box)box.innerHTML='<div class="notice">'+esc(e.message||"Impossible de charger les amis.")+'</div>';
+    if(msg)msg.textContent="Échec du chargement.";
+  }finally{
+    if(button){button.disabled=false;button.textContent="Charger"}
+  }
+}
+
 function live(){
   layout('<div class="notice"><strong>Données externes</strong><br>Cette page vérifie les connexions lorsque les modules sont ouverts. Aucun secret n’est envoyé au navigateur.</div><div style="height:16px"></div><section class="grid g2"><div class="card"><div class="section-title">Services</div><div class="list"><div class="row"><span>Cosmétiques</span><span class="tag">API</span></div><div class="row"><span>Carte</span><span class="tag">API</span></div><div class="row"><span>Boutique</span><span class="tag">API</span></div><div class="row"><span>Stats personnelles</span><span class="tag">Optionnel</span></div></div></div><div class="card"><div class="section-title">Sécurité</div><p class="sub">Le navigateur ne reçoit aucune clé secrète. Les appels API passent par les fonctions serveur Vercel.</p></div></section>');
 }
@@ -922,7 +999,7 @@ function filterPage(v){
 
 function go(p){FN.page=p;render();window.scrollTo(0,0)}
 function render(){
-  var fn={home:home,map:mapPage,quests:quests,items:items,shop:shop,profile:profile,tournaments:tournaments,live:live}[FN.page]||home;
+  var fn={home:home,map:mapPage,quests:quests,items:items,shop:shop,profile:profile,tournaments:tournaments,live:live,friends:friends}[FN.page]||home;
   try{fn()}catch(e){console.error(e);document.getElementById("app").innerHTML='<div style="padding:30px;color:white"><h1>FN Companion</h1><p>Une erreur a été détectée. Recharge la page.</p></div>'}
 }
 
