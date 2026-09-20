@@ -253,7 +253,7 @@ async function loadTournamentList(){
     var count=counts[t.id]||0;
     var joined=!!(FN.user&&pr.data&&pr.data.some(function(x){return x.tournament_id===t.id&&x.player_id===FN.user.id}));
     var status=t.status==='open'?'Ouvert':(t.status==='live'?'En cours':(t.status==='completed'?'Terminé':'Annulé'));
-    return '<div class="card tournament-card"><div class="row"><div><div class="eyebrow">'+esc(t.game_mode)+'</div><h3>'+esc(t.name)+'</h3><div class="sub">'+count+' / '+t.max_players+' joueurs · '+status+'</div></div><div class="toolbar"><button class="btn" onclick="openTournament(\''+t.id+'\')">Ouvrir</button>'+(t.status==='open'&&!joined&&count<t.max_players?'<button class="btn primary" onclick="joinTournament(\''+t.id+'\')">S’inscrire</button>':'')+'</div></div></div>';
+    return '<div class="card tournament-card"><div class="row"><div><div class="eyebrow">'+esc(t.game_mode)+'</div><h3>'+esc(t.name)+'</h3><div class="sub">'+count+' / '+t.max_players+' joueurs · '+status+'</div></div><div class="toolbar"><button class="btn" onclick="openTournament(\''+t.id+'\')">Ouvrir</button>'+(t.status==='open'&&!joined&&count<t.max_players?'<button class="btn primary" onclick="joinTournament(\''+t.id+'\')">S’inscrire</button>':'')+(FN.user&&t.created_by===FN.user.id?'<button class="btn danger" onclick="deleteTournament(\''+t.id+'\')">Supprimer</button>':'')+'</div></div></div>';
   }).join('');
 }
 
