@@ -257,6 +257,18 @@ async function loadTournamentList(){
   }).join('');
 }
 
+async function deleteTournament(id){
+  if(!FN.user){toast('Connecte-toi pour supprimer un tournoi');return}
+  if(!confirm('Supprimer définitivement ce tournoi et tous ses matchs ?'))return;
+  var res=await FN.supabase.rpc('fn_delete_tournament',{p_tournament_id:id});
+  if(res.error){toast(res.error.message);return}
+  FN.selectedTournament=null;
+  var detail=document.getElementById('tournament-detail');
+  if(detail)detail.innerHTML='';
+  toast('Tournoi supprimé');
+  await loadTournamentList();
+}
+
 async function joinTournament(id){
   if(!FN.user){toast('Connecte-toi pour t’inscrire');return}
   var res=await FN.supabase.rpc('fn_join_tournament',{p_tournament_id:id});
@@ -297,7 +309,7 @@ async function openTournament(id){
     var t=await FN.supabase.from("fn_tournaments").select("*").eq("id",id).single();
     if(t.error)throw t.error;
 
-    var ps=await FN.supabase.from("fn_tournament_players").select("player_id,seed,status,joined_at").eq("tournament_id",id).order("seed",{ascending:true,nullsFirst:false});
+    var ps=await FN.supabase.from("fn_tournament_players").select("player_id,seed,status,joined_at,points,wins,losses,matches_played").eq("tournament_id",id).order("seed",{ascending:true,nullsFirst:false});
     if(ps.error)throw ps.error;
 
     var ids=(ps.data||[]).map(function(x){return x.player_id});
@@ -318,19 +330,28 @@ async function openTournament(id){
 
     var standings={};
     (ps.data||[]).forEach(function(p){
-      standings[p.player_id]={player_id:p.player_id,points:0,wins:0,losses:0,matches:0};
+      standings[p.player_id]={
+        player_id:p.player_id,
+        points:Number(p.points||0),
+        wins:Number(p.wins||0),
+        losses:Number(p.losses||0),
+        matches:Number(p.matches_played||0)
+      };
     });
+    // Fallback pour les anciens résultats qui auraient été enregistrés avant
+    // la persistance des compteurs dans fn_tournament_players.
     (ms.data||[]).forEach(function(m){
       if(m.status!=="completed"||!m.winner_id||!m.player1_id||!m.player2_id)return;
-      var loser=m.winner_id===m.player1_id?m.player2_id:m.player1_id;
-      if(standings[m.winner_id]){
+      var loser=m.loser_id||(m.winner_id===m.player1_id?m.player2_id:m.player1_id);
+      if(standings[m.winner_id]&&standings[m.winner_id].matches===0){
         standings[m.winner_id].wins++;
         standings[m.winner_id].matches++;
-        standings[m.winner_id].points+=3;
+        standings[m.winner_id].points+=Number(m.winner_points||3);
       }
-      if(standings[loser]){
+      if(standings[loser]&&standings[loser].matches===0){
         standings[loser].losses++;
         standings[loser].matches++;
+        standings[loser].points+=Number(m.loser_points||0);
       }
     });
 
@@ -370,13 +391,17 @@ async function openTournament(id){
     }).join("");
 
     var startButton=(organizer&&t.data.status==="open"&&(ps.data||[]).length===t.data.max_players)?'<button class="btn primary" id="start-tournament-btn">Démarrer</button>':"";
-    area.innerHTML='<div class="card"><div class="toolbar" style="justify-content:space-between"><div><div class="eyebrow">'+esc(t.data.game_mode)+'</div><h2>'+esc(t.data.name)+'</h2><div class="sub">Statut : '+esc(t.data.status)+' · '+(ps.data||[]).length+' / '+t.data.max_players+' joueurs</div></div><div class="toolbar">'+startButton+'<button class="btn" id="refresh-tournament-btn">Actualiser</button></div></div></div><div style="height:12px"></div><div class="notice">Système de points : <strong>3 points par victoire</strong>, <strong>0 point en cas de défaite</strong>. Le classement se met à jour après chaque résultat.</div><div style="height:12px"></div><section class="grid g2"><div><div class="card"><div class="section-title">Classement du tournoi</div><div class="list">'+leaderboardHtml+'</div></div><div style="height:12px"></div><div class="card"><div class="section-title">Joueurs inscrits</div><div class="list">'+roster+'</div></div></div><div>'+rounds+'</div></section>';
+    var deleteButton=organizer?'<button class="btn danger" id="delete-tournament-btn">Supprimer</button>':"";
+    area.innerHTML='<div class="card"><div class="toolbar" style="justify-content:space-between"><div><div class="eyebrow">'+esc(t.data.game_mode)+'</div><h2>'+esc(t.data.name)+'</h2><div class="sub">Statut : '+esc(t.data.status)+' · '+(ps.data||[]).length+' / '+t.data.max_players+' joueurs</div></div><div class="toolbar">'+startButton+deleteButton+'<button class="btn" id="refresh-tournament-btn">Actualiser</button></div></div></div><div style="height:12px"></div><div class="notice">Système de points : <strong>3 points par victoire</strong>, <strong>0 point en cas de défaite</strong>. Le classement se met à jour après chaque résultat.</div><div style="height:12px"></div><section class="grid g2"><div><div class="card"><div class="section-title">Classement du tournoi</div><div class="list">'+leaderboardHtml+'</div></div><div style="height:12px"></div><div class="card"><div class="section-title">Joueurs inscrits</div><div class="list">'+roster+'</div></div></div><div>'+rounds+'</div></section>';
 
     var refresh=document.getElementById("refresh-tournament-btn");
     if(refresh)refresh.onclick=function(){openTournament(id)};
 
     var starter=document.getElementById("start-tournament-btn");
     if(starter)starter.onclick=function(){startTournament(id)};
+
+    var deleter=document.getElementById("delete-tournament-btn");
+    if(deleter)deleter.onclick=function(){deleteTournament(id)};
 
     area.querySelectorAll("[data-report-match]").forEach(function(btn){
       btn.onclick=function(){reportMatch(btn.getAttribute("data-report-match"))};
