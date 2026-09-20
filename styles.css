@@ -27,3 +27,6 @@
 .map-stage .poi:hover{font-size:9px}
 
 .auth-card{max-width:980px}.tournament-card h3{margin:4px 0;font-size:20px}.tournament-round{display:grid;gap:10px;margin-bottom:16px}.match-card{padding:12px}.match-report{display:flex;gap:7px;align-items:center;flex-wrap:wrap;margin-top:9px}.score-input{width:70px;background:#0f1420;border:1px solid var(--line);color:#fff;padding:9px 10px;border-radius:10px}
+
+
+.btn.danger{border-color:#a33;background:#3a1115;color:#fff}.btn.danger:hover{background:#55171d}
