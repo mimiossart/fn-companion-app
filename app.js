@@ -950,7 +950,7 @@ async function loadFriends(){
   if(box)box.innerHTML='<div class="card"><div class="sub">Récupération des données sociales…</div></div>';
   try{
     var r=await fetch("/api/fortnite?type=friends&accountId="+encodeURIComponent(accountId),{
-      headers:{Authorization:/^Bearer\s/i.test(oauth)?oauth:"Bearer "+oauth}
+      headers:{"x-fortnite-token":oauth}
     });
     var text=await r.text(),d=null;try{d=JSON.parse(text)}catch(_){d=null}
     if(!r.ok)throw new Error((d&&d.error)||("Erreur serveur "+r.status));
